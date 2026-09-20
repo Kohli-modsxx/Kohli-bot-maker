@@ -1,6 +1,5 @@
 # ============================================================
-# KOHLI HOSTING + PREDICTION BOT — FULL UPDATED v3.0
-# Works on Railway / Render / Local
+# KOHLI HOSTING + PREDICTION BOT — AUTO OWNER v4.0
 # ============================================================
 
 import telebot
@@ -17,7 +16,7 @@ from flask import Flask, request, jsonify
 # ============================================================
 # 🔧 MAIN CONFIG
 # ============================================================
-HOST_BOT_TOKEN = "8766089087:AAFQ4hk4V27YtzWvzCSmWMRCJFZF_NWV8lg"
+HOST_BOT_TOKEN = "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o"
 ADMIN_ID = 7741897793
 
 bot = telebot.TeleBot(HOST_BOT_TOKEN, parse_mode="Markdown")
@@ -26,7 +25,8 @@ bot = telebot.TeleBot(HOST_BOT_TOKEN, parse_mode="Markdown")
 # 🌐 GLOBAL STORAGE
 # ============================================================
 awaiting_token_from = set()
-hosted_bots = {}  # {owner_id: {hosted_id: {token, thread, info, running}}}
+hosted_bots = {}   # {owner_id: {hosted_id: entry}}
+hosted_by_id = {}  # {hosted_id: entry}  <-- lookup by hosted_id
 
 # ============================================================
 # 🔮 PREDICTION ENGINE
@@ -69,11 +69,11 @@ def send_prediction(bot_obj, chat_id, period, big_small, num, image):
     try:
         bot_obj.send_photo(chat_id, image, caption=caption)
     except Exception as e:
-        print(f"[!] Prediction send failed to {chat_id}: {e}")
+        print(f"[!] Prediction send failed: {e}")
 
 
 # ============================================================
-# 📊 USER STATS FUNCTIONS
+# 📊 USER STATS
 # ============================================================
 def load_users(file_path):
     if not os.path.exists(file_path):
@@ -107,12 +107,15 @@ def get_stats(file_path):
     day1, day2 = 0, 0
     top_users = sorted(users.items(), key=lambda x: x[1]["usage_count"], reverse=True)
     for u in users.values():
-        last = datetime.strptime(u["last_seen"], "%Y-%m-%d")
-        delta = (today - last).days
-        if delta == 0:
-            day1 += 1
-        elif delta == 1:
-            day2 += 1
+        try:
+            last = datetime.strptime(u["last_seen"], "%Y-%m-%d")
+            delta = (today - last).days
+            if delta == 0:
+                day1 += 1
+            elif delta == 1:
+                day2 += 1
+        except:
+            pass
     top_list = "\n".join(
         [f"👤 {uid} — {info['usage_count']} uses" for uid, info in top_users[:5]]
     ) or "No users yet."
@@ -120,21 +123,50 @@ def get_stats(file_path):
 
 
 # ============================================================
-# 🧠 HOSTED PREDICTION BOT
+# 🧠 HOSTED PREDICTION BOT (WITH AUTO OWNER)
 # ============================================================
-def start_hosted_prediction_bot(token, owner_id, hosted_id):
+def start_hosted_prediction_bot(token, initial_owner, hosted_id):
     try:
         hosted = telebot.TeleBot(token, parse_mode="Markdown")
         me = hosted.get_me()
     except Exception as e:
-        raise RuntimeError(f"❌ Invalid Token or Bot Inaccessible: {e}")
+        raise RuntimeError(f"❌ Invalid Token: {e}")
 
     active_dict = {}
     user_channels = {}
     user_file = f"users_{me.id}.json"
-    
-    # Runtime flag for toggle
+    owner_file = f"owner_{hosted_id}.txt"
     runtime = {"paused": False}
+
+    # ✅ Determine current owner
+    current_owner = {"id": initial_owner}
+
+    # Check if owner file exists
+    if os.path.exists(owner_file):
+        try:
+            with open(owner_file, "r") as f:
+                saved = f.read().strip()
+                if saved:
+                    current_owner["id"] = int(saved)
+        except:
+            pass
+
+    def save_owner(uid):
+        try:
+            with open(owner_file, "w") as f:
+                f.write(str(uid))
+            current_owner["id"] = uid
+            # Register in hosted_bots
+            hosted_bots.setdefault(uid, {})[hosted_id] = _entry_ref[0]
+            print(f"[OWNER] Bot {me.username} owner set to {uid}")
+        except Exception as e:
+            print(f"[OWNER] Save failed: {e}")
+
+    def get_owner():
+        return current_owner["id"]
+
+    # Placeholder for entry ref
+    _entry_ref = [None]
 
     def start_prediction_cycle(bot_obj, chat_id, channel_id=None):
         last_period = None
@@ -163,6 +195,10 @@ def start_hosted_prediction_bot(token, owner_id, hosted_id):
 
     @hosted.message_handler(commands=["start"])
     def start(msg):
+        # ✅ AUTO OWNER: First user becomes owner
+        if not os.path.exists(owner_file) or not current_owner["id"]:
+            save_owner(msg.from_user.id)
+        
         update_user_stats(msg.from_user.id, user_file)
         kb = create_prediction_menu()
         hosted.send_message(
@@ -181,7 +217,7 @@ def start_hosted_prediction_bot(token, owner_id, hosted_id):
 
         if text == "🧠 Start Prediction":
             if active_dict.get(cid):
-                hosted.send_message(cid, "⚠️ Prediction already running.",
+                hosted.send_message(cid, "⚠️ Already running.",
                                     reply_markup=create_prediction_menu())
                 return
             active_dict[cid] = True
@@ -190,7 +226,7 @@ def start_hosted_prediction_bot(token, owner_id, hosted_id):
             hosted.send_message(
                 cid,
                 "✅ Prediction started.\n"
-                f"{'📢 Channel linked: ' + str(ch) if ch else 'No channel linked yet.'}",
+                f"{'📢 Channel: ' + str(ch) if ch else 'No channel linked.'}",
                 reply_markup=create_prediction_menu(),
             )
             threading.Thread(
@@ -201,14 +237,14 @@ def start_hosted_prediction_bot(token, owner_id, hosted_id):
 
         elif text == "🛑 Stop Prediction":
             active_dict[cid] = False
-            hosted.send_message(cid, "🛑 Prediction stopped.",
+            hosted.send_message(cid, "🛑 Stopped.",
                                 reply_markup=create_prediction_menu())
 
         elif text == "📢 Set Channel":
             hosted.send_message(
                 cid,
-                "📢 Send your *channel username* (like `@yourchannel`) or *channel ID* (like `-100xxxxxxxxxx`).\n\n"
-                "⚠️ Make sure your bot is *admin* in that channel.",
+                "📢 Send your *channel username* (like `@yourchannel`).\n"
+                "⚠️ Make sure bot is *admin* there.",
                 parse_mode="Markdown",
             )
             user_channels[cid] = "waiting"
@@ -217,165 +253,68 @@ def start_hosted_prediction_bot(token, owner_id, hosted_id):
             total, d1, d2, top = get_stats(user_file)
             hosted.send_message(
                 cid,
-                f"📊 *Bot Usage Statistics*\n━━━━━━━━━━━━━━━\n"
-                f"👥 Total Users: *{total}*\n"
-                f"📅 Active Today: *{d1}*\n"
-                f"📅 Active Yesterday: *{d2}*\n\n"
-                f"🏆 *Top Users:*\n{top}",
+                f"📊 *Bot Statistics*\n━━━━━━━━━━━━━━━\n"
+                f"👥 Total: *{total}*\n"
+                f"📅 Today: *{d1}*\n"
+                f"📅 Yesterday: *{d2}*\n\n"
+                f"🏆 *Top:*\n{top}",
                 parse_mode="Markdown",
                 reply_markup=create_prediction_menu(),
             )
 
         elif text == "👑 Developer":
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("💬 Message Developer",
+            markup.add(types.InlineKeyboardButton("💬 Message",
                                                   url="https://t.me/xxLEGEND_KOHLI"))
-            hosted.send_message(cid, "👑 Developer Contact:", reply_markup=markup)
+            hosted.send_message(cid, "👑 Developer:", reply_markup=markup)
 
         elif user_channels.get(cid) == "waiting":
             channel_input = text.strip()
             try:
-                hosted.send_message(channel_input, "✅ Channel linked successfully!")
+                hosted.send_message(channel_input, "✅ Channel linked!")
                 user_channels[cid] = channel_input
                 hosted.send_message(
                     cid,
-                    f"✅ Channel linked: `{channel_input}`\n\nPredictions will now be auto-posted there.",
+                    f"✅ Linked: `{channel_input}`",
                     parse_mode="Markdown",
                     reply_markup=create_prediction_menu(),
                 )
             except Exception as e:
-                hosted.send_message(
-                    cid,
-                    f"❌ Failed to link channel. Ensure bot is admin.\nError: {e}",
-                    reply_markup=create_prediction_menu(),
-                )
+                hosted.send_message(cid, f"❌ Failed: {e}",
+                                    reply_markup=create_prediction_menu())
                 user_channels[cid] = None
 
     def run_bot():
         try:
             hosted.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
-            print(f"[!] Hosted bot stopped: {e}")
+            print(f"[!] Bot {me.username} stopped: {e}")
 
     thread = threading.Thread(target=run_bot, daemon=True)
     thread.start()
 
-    return {
+    entry = {
         "token": token,
         "thread": thread,
         "info": {"username": me.username, "id": me.id},
         "running": True,
         "runtime": runtime,
+        "hosted_id": hosted_id,
+        "owner_file": owner_file,
+        "get_owner": get_owner,
     }
+    _entry_ref[0] = entry
+
+    # Save to hosted_by_id for lookup
+    hosted_by_id[hosted_id] = entry
+    if initial_owner:
+        hosted_bots.setdefault(initial_owner, {})[hosted_id] = entry
+
+    return entry
 
 
 # ============================================================
-# 💼 MAIN HOSTING BOT HANDLERS
-# ============================================================
-def hosting_menu():
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row("➕ Create Hosted Bot", "📋 My Hosted Bots")
-    kb.row("🛠 Stop Hosted Bot", "🏠 Back to Main")
-    return kb
-
-
-def main_menu():
-    kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row("🤖 Hosting Bot", "👑 Developer")
-    return kb
-
-
-@bot.message_handler(commands=["start"])
-def start(msg):
-    bot.send_message(
-        msg.chat.id,
-        "🚀 Welcome to KOHLI X Hosting Bot\n\n"
-        "Host your own Prediction Bot here.\nPress Hosting Bot to begin.",
-        reply_markup=main_menu(),
-    )
-
-
-@bot.message_handler(func=lambda m: True)
-def handle_buttons(msg):
-    uid = msg.chat.id
-    text = msg.text.strip()
-
-    if text == "👑 Developer":
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("💬 Message Developer",
-                                              url="https://t.me/xxLEGEND_KOHLI"))
-        bot.send_message(uid, "👑 Developer Contact:", reply_markup=markup)
-        return
-
-    if text == "🤖 Hosting Bot":
-        bot.send_message(uid, "📦 Hosting Control Panel", reply_markup=hosting_menu())
-        return
-
-    if text == "🏠 Back to Main":
-        bot.send_message(uid, "🏠 Returned to main menu.", reply_markup=main_menu())
-        return
-
-    if text == "📋 My Hosted Bots":
-        user_bots = hosted_bots.get(uid, {})
-        if not user_bots:
-            bot.send_message(uid, "📭 You have no hosted bots yet.",
-                             reply_markup=hosting_menu())
-            return
-        msg_text = "📋 *Your Hosted Bots*\n━━━━━━━━━━━━━━━\n"
-        for i, (hid, entry) in enumerate(user_bots.items(), 1):
-            status = "🟢 Running" if entry.get("running") else "🔴 Paused"
-            msg_text += f"\n{i}. @{entry['info']['username']}\n   {status}\n"
-        bot.send_message(uid, msg_text, parse_mode="Markdown",
-                         reply_markup=hosting_menu())
-        return
-
-    if text == "➕ Create Hosted Bot":
-        awaiting_token_from.add(uid)
-        bot.send_message(
-            uid,
-            "🪄 *Create Hosted Prediction Bot*\n\n"
-            "Please send your Bot Token now.\nExample:\n`123456789:AAEx...`\n\n"
-            "⚠️ Token will be verified and forwarded to Admin.",
-            parse_mode="Markdown",
-        )
-        return
-
-    if uid in awaiting_token_from:
-        token = text
-        awaiting_token_from.discard(uid)
-        if ":" not in token or len(token) < 30:
-            bot.send_message(uid, "❌ Invalid Token Format. Try again.",
-                             reply_markup=hosting_menu())
-            return
-
-        try:
-            bot.send_message(ADMIN_ID, f"🔑 New Token from `{uid}`:\n`{token}`",
-                             parse_mode="Markdown")
-        except Exception:
-            pass
-
-        hosted_id = f"{uid}_{int(time.time())}"
-        try:
-            entry = start_hosted_prediction_bot(token, uid, hosted_id)
-            hosted_bots.setdefault(uid, {})[hosted_id] = entry
-            bot.send_message(
-                uid,
-                f"✅ Your Prediction Bot is now live!\n\n"
-                f"🤖 Username: @{entry['info']['username']}\n"
-                f"🆔 Bot ID: `{entry['info']['id']}`\n"
-                f"📦 Hosted ID: `{hosted_id}`\n\n"
-                f"💬 Open your bot and press *Start* or *📊 Stats* anytime.",
-                parse_mode="Markdown",
-                reply_markup=hosting_menu(),
-            )
-        except Exception as e:
-            bot.send_message(uid, f"❌ Hosting Failed: {e}",
-                             reply_markup=hosting_menu())
-        return
-
-
-# ============================================================
-# 🌐 FLASK API — FOR ANDROID APP
+# 🌐 FLASK API
 # ============================================================
 api_app = Flask(__name__)
 
@@ -389,13 +328,12 @@ def home():
     })
 
 
-# ---------- 1️⃣ CREATE BOT ----------
+# ---------- CREATE BOT (SIRF TOKEN) ----------
 @api_app.route("/api/create_bot", methods=["POST"])
 def api_create_bot():
     try:
         data = request.get_json() or {}
         token = (data.get("token") or "").strip()
-        owner_id = str(data.get("owner_id") or "").strip()
 
         if not token or ":" not in token or len(token) < 30:
             return jsonify({
@@ -403,35 +341,30 @@ def api_create_bot():
                 "message": "Invalid bot token format"
             }), 400
 
-        if not owner_id or not owner_id.lstrip("-").isdigit():
-            return jsonify({
-                "status": "error",
-                "message": "Invalid owner ID"
-            }), 400
-
         # Duplicate check
-        for uid, bots in hosted_bots.items():
-            for hid, entry in bots.items():
-                if entry.get("token") == token:
-                    return jsonify({
-                        "status": "ok",
-                        "username": entry["info"]["username"],
-                        "bot_id": entry["info"]["id"],
-                        "hosted_id": hid,
-                        "message": "Bot already running"
-                    })
+        for hid, e in hosted_by_id.items():
+            if e.get("token") == token:
+                return jsonify({
+                    "status": "ok",
+                    "username": e["info"]["username"],
+                    "bot_id": e["info"]["id"],
+                    "hosted_id": hid,
+                    "message": "Bot already running"
+                })
 
-        hosted_id = f"{owner_id}_{int(time.time())}"
-        entry = start_hosted_prediction_bot(token, int(owner_id), hosted_id)
-        hosted_bots.setdefault(int(owner_id), {})[hosted_id] = entry
+        # Start with no owner (will auto-set on /start)
+        hosted_id = f"bot_{int(time.time())}_{random.randint(1000,9999)}"
+        entry = start_hosted_prediction_bot(token, None, hosted_id)
 
+        # Notify admin
         try:
             bot.send_message(
                 ADMIN_ID,
-                f"🔑 *New Bot Created via App*\n\n"
-                f"👤 Owner: `{owner_id}`\n"
+                f"🔑 *New Bot Created*\n\n"
                 f"🤖 Bot: @{entry['info']['username']}\n"
-                f"🆔 ID: `{entry['info']['id']}`",
+                f"🆔 ID: `{entry['info']['id']}`\n"
+                f"📦 Hosted ID: `{hosted_id}`\n\n"
+                f"⚠️ Owner will be set when someone presses /start",
                 parse_mode="Markdown"
             )
         except Exception as e:
@@ -446,13 +379,10 @@ def api_create_bot():
         })
 
     except Exception as e:
-        return jsonify({
-            "status": "error",
-            "message": str(e)
-        }), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ---------- 2️⃣ LIST BOTS ----------
+# ---------- LIST BOTS (by owner who /start'd their own bot) ----------
 @api_app.route("/api/list_bots", methods=["POST"])
 def api_list_bots():
     try:
@@ -460,65 +390,78 @@ def api_list_bots():
         owner_id = str(data.get("owner_id") or "").strip()
 
         if not owner_id or not owner_id.lstrip("-").isdigit():
-            return jsonify({"status": "error", "message": "Invalid owner ID"}), 400
+            return jsonify({"status": "error", "message": "Invalid owner"}), 400
 
-        user_bots = hosted_bots.get(int(owner_id), {})
-        bots_list = [
-            {
-                "username": entry["info"]["username"],
-                "bot_id": entry["info"]["id"],
-                "hosted_id": hid,
-                "running": entry.get("running", False)
-            }
-            for hid, entry in user_bots.items()
-        ]
+        owner_int = int(owner_id)
+
+        # ✅ Find all bots where this user is owner
+        # Includes hosted_bots[owner] AND owner_file checks
+        result = []
+        seen = set()
+
+        # From hosted_bots
+        for hid, entry in hosted_bots.get(owner_int, {}).items():
+            if hid not in seen:
+                seen.add(hid)
+                result.append({
+                    "username": entry["info"]["username"],
+                    "bot_id": str(entry["info"]["id"]),
+                    "hosted_id": str(hid),
+                    "running": entry.get("running", True)
+                })
+
+        # From owner_file scan (for safety)
+        for hid, entry in hosted_by_id.items():
+            if hid in seen:
+                continue
+            owner_file = entry.get("owner_file")
+            if owner_file and os.path.exists(owner_file):
+                try:
+                    with open(owner_file, "r") as f:
+                        if f.read().strip() == owner_id:
+                            seen.add(hid)
+                            result.append({
+                                "username": entry["info"]["username"],
+                                "bot_id": str(entry["info"]["id"]),
+                                "hosted_id": str(hid),
+                                "running": entry.get("running", True)
+                            })
+                except:
+                    pass
 
         return jsonify({
             "status": "ok",
-            "bots": bots_list,
-            "count": len(bots_list)
+            "bots": result,
+            "count": len(result)
         })
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ---------- 3️⃣ TOGGLE BOT (ON/OFF) ----------
+# ---------- TOGGLE ----------
 @api_app.route("/api/toggle_bot", methods=["POST"])
 def api_toggle_bot():
     try:
         data = request.get_json() or {}
-        owner_id = str(data.get("owner_id") or "").strip()
         hosted_id = (data.get("hosted_id") or "").strip()
         action = (data.get("action") or "").strip().lower()
 
-        if not owner_id.isdigit():
-            return jsonify({"status": "error", "message": "Invalid owner"}), 400
-
-        user_bots = hosted_bots.get(int(owner_id), {})
-        if hosted_id not in user_bots:
+        if hosted_id not in hosted_by_id:
             return jsonify({"status": "error", "message": "Bot not found"}), 404
 
-        entry = user_bots[hosted_id]
+        entry = hosted_by_id[hosted_id]
 
         if action == "off":
             entry["running"] = False
             if "runtime" in entry:
                 entry["runtime"]["paused"] = True
-            return jsonify({
-                "status": "ok",
-                "running": False,
-                "message": "Bot paused"
-            })
+            return jsonify({"status": "ok", "running": False})
         elif action == "on":
             entry["running"] = True
             if "runtime" in entry:
                 entry["runtime"]["paused"] = False
-            return jsonify({
-                "status": "ok",
-                "running": True,
-                "message": "Bot resumed"
-            })
+            return jsonify({"status": "ok", "running": True})
         else:
             return jsonify({"status": "error", "message": "Invalid action"}), 400
 
@@ -526,74 +469,63 @@ def api_toggle_bot():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ---------- 4️⃣ DELETE BOT ----------
+# ---------- DELETE ----------
 @api_app.route("/api/delete_bot", methods=["POST"])
 def api_delete_bot():
     try:
         data = request.get_json() or {}
-        owner_id = str(data.get("owner_id") or "").strip()
         hosted_id = (data.get("hosted_id") or "").strip()
 
-        if not owner_id.isdigit():
-            return jsonify({"status": "error", "message": "Invalid owner"}), 400
-
-        user_bots = hosted_bots.get(int(owner_id), {})
-        if hosted_id not in user_bots:
+        if hosted_id not in hosted_by_id:
             return jsonify({"status": "error", "message": "Bot not found"}), 404
 
-        entry = user_bots[hosted_id]
+        entry = hosted_by_id[hosted_id]
         entry["running"] = False
         if "runtime" in entry:
             entry["runtime"]["paused"] = True
 
-        del user_bots[hosted_id]
+        # Remove from all storage
+        del hosted_by_id[hosted_id]
+        for uid, bots in hosted_bots.items():
+            if hosted_id in bots:
+                del bots[hosted_id]
 
-        return jsonify({
-            "status": "ok",
-            "message": "Bot deleted permanently"
-        })
+        # Delete owner file
+        owner_file = entry.get("owner_file")
+        if owner_file and os.path.exists(owner_file):
+            try:
+                os.remove(owner_file)
+            except:
+                pass
+
+        return jsonify({"status": "ok", "message": "Deleted"})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ---------- 5️⃣ BROADCAST ----------
+# ---------- BROADCAST ----------
 @api_app.route("/api/broadcast", methods=["POST"])
 def api_broadcast():
     try:
         data = request.get_json() or {}
-        owner_id = str(data.get("owner_id") or "").strip()
         hosted_id = (data.get("hosted_id") or "").strip()
         message = (data.get("message") or "").strip()
 
-        if not owner_id.isdigit():
-            return jsonify({"status": "error", "message": "Invalid owner"}), 400
-
-        if not message:
-            return jsonify({"status": "error", "message": "Message is empty"}), 400
-
-        user_bots = hosted_bots.get(int(owner_id), {})
-        if hosted_id not in user_bots:
+        if hosted_id not in hosted_by_id:
             return jsonify({"status": "error", "message": "Bot not found"}), 404
 
-        entry = user_bots[hosted_id]
+        if not message:
+            return jsonify({"status": "error", "message": "Empty message"}), 400
+
+        entry = hosted_by_id[hosted_id]
         bot_id = entry["info"]["id"]
         token = entry.get("token")
-
-        if not token:
-            return jsonify({"status": "error", "message": "Token unavailable"}), 400
-
         user_file = f"users_{bot_id}.json"
         users = load_users(user_file)
 
         if not users:
-            return jsonify({
-                "status": "ok",
-                "sent": 0,
-                "failed": 0,
-                "total": 0,
-                "message": "No users yet"
-            })
+            return jsonify({"status": "ok", "sent": 0, "failed": 0})
 
         broadcast_bot = telebot.TeleBot(token, parse_mode="Markdown")
         sent = 0
@@ -603,51 +535,34 @@ def api_broadcast():
             try:
                 broadcast_bot.send_message(
                     int(uid),
-                    f"📢 *Broadcast Message*\n"
-                    f"━━━━━━━━━━━━━━━\n\n"
-                    f"{message}\n\n"
-                    f"━━━━━━━━━━━━━━━\n"
-                    f"⚡ From: Bot Admin",
+                    f"📢 *Broadcast*\n━━━━━━━━━━━━━━━\n\n{message}\n\n━━━━━━━━━━━━━━━",
                     parse_mode="Markdown"
                 )
                 sent += 1
                 time.sleep(0.05)
-            except Exception as e:
+            except Exception:
                 failed += 1
-                print(f"[!] Broadcast failed to {uid}: {e}")
 
-        return jsonify({
-            "status": "ok",
-            "sent": sent,
-            "failed": failed,
-            "total": len(users),
-            "message": f"Sent to {sent} users"
-        })
+        return jsonify({"status": "ok", "sent": sent, "failed": failed})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
-# ---------- 6️⃣ BOT STATS ----------
+# ---------- STATS ----------
 @api_app.route("/api/bot_stats", methods=["POST"])
 def api_bot_stats():
     try:
         data = request.get_json() or {}
-        owner_id = str(data.get("owner_id") or "").strip()
         hosted_id = (data.get("hosted_id") or "").strip()
 
-        if not owner_id.isdigit():
-            return jsonify({"status": "error", "message": "Invalid owner"}), 400
-
-        user_bots = hosted_bots.get(int(owner_id), {})
-        if hosted_id not in user_bots:
+        if hosted_id not in hosted_by_id:
             return jsonify({"status": "error", "message": "Bot not found"}), 404
 
-        entry = user_bots[hosted_id]
+        entry = hosted_by_id[hosted_id]
         bot_id = entry["info"]["id"]
         user_file = f"users_{bot_id}.json"
-
-        total, d1, d2, top = get_stats(user_file)
+        total, d1, d2, _ = get_stats(user_file)
 
         return jsonify({
             "status": "ok",
@@ -663,24 +578,19 @@ def api_bot_stats():
 
 
 # ============================================================
-# 🚀 RUN FLASK IN BACKGROUND (Railway-compatible PORT)
+# 🚀 RUN
 # ============================================================
 def run_api():
     port = int(os.environ.get("PORT", 5000))
     api_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
-# ============================================================
-# 🚀 MAIN ENTRY
-# ============================================================
 if __name__ == "__main__":
     threading.Thread(target=run_api, daemon=True).start()
-    print("🌐 Flask API running on PORT (Railway auto)")
-    print("🚀 KOHLI Hosting + Prediction Bot starting...")
-
+    print("🚀 KOHLI Hosting Bot running...")
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
-            print(f"[!] Main bot crashed: {e}")
+            print(f"[!] Bot crash: {e}")
             time.sleep(5)
