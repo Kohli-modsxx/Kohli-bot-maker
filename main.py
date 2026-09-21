@@ -29,7 +29,7 @@ from telebot.apihelper import ApiTelegramException
 # CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────────────
 
-HOST_BOT_TOKEN = "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o"
+HOST_BOT_TOKEN = "8766089087:AAGk1LLZkbOoaz15MiuwfMF3xomTRD_XxtE"
 ADMIN_ID = 7741897793
 
 FIREBASE_URL = "https://glowbet-1b2ce-default-rtdb.firebaseio.com"
