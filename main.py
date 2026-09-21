@@ -1,8 +1,9 @@
 # ============================================================
-# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v8.0
+# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v8.1
 # ============================================================
 # 🔒 BLOCKING DEPLOY — Bot live hone ke baad hi response
 # ⚔️ Dragon Track | 🤖 Adaptive Quant | 🔑 Seed Hash Decrypter
+# 🚀 Railway Ready — Fixed Python 3.11.10 build
 # ============================================================
 
 import asyncio
@@ -509,7 +510,7 @@ async def send_win_sticker(bot_obj, target):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# PREDICTION ALGORITHMS (compressed — same logic as v7.2)
+# PREDICTION ALGORITHMS
 # ──────────────────────────────────────────────────────────────────────────────
 
 def extract_outcomes(records, n=300):
@@ -1867,7 +1868,7 @@ async def _end_session(hosted, user_id, channel, reason, state):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# HOSTED BOT CREATION — BLOCKING (CRITICAL FIX)
+# HOSTED BOT CREATION — BLOCKING
 # ──────────────────────────────────────────────────────────────────────────────
 
 async def _create_hosted_bot_async(token, initial_owner, hosted_id):
@@ -1877,7 +1878,6 @@ async def _create_hosted_bot_async(token, initial_owner, hosted_id):
     hosted = AsyncTeleBot(token)
     hosted.request_timeout = REQUEST_TIMEOUT
 
-    # Verify token — REQUIRED for success
     me = None
     last_err = None
     for attempt in range(3):
@@ -1955,7 +1955,6 @@ async def _create_hosted_bot_async(token, initial_owner, hosted_id):
     if current_owner["id"]:
         hosted_bots.setdefault(current_owner["id"], {})[hosted_id] = entry
 
-    # Start polling
     asyncio.create_task(_poll_hosted(hosted, me.username))
 
     print(f"[CREATE] ✅ @{me.username} DEPLOYED")
@@ -1984,7 +1983,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# FLASK API — BLOCKING DEPLOY
+# FLASK API
 # ──────────────────────────────────────────────────────────────────────────────
 
 api_app = Flask(__name__)
@@ -1995,12 +1994,17 @@ def home():
     return jsonify({
         "status": "online",
         "service": "KOHLI Premium Hosting",
-        "version": "8.0",
+        "version": "8.1",
         "hosted_bots": len(hosted_by_id),
         "registry_count": len(hosted_registry),
         "active_sessions": len(active_sessions),
         "timestamp": datetime.now().isoformat(),
     })
+
+
+@api_app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "healthy"}), 200
 
 
 @api_app.route("/api/create_bot", methods=["POST"])
@@ -2017,7 +2021,6 @@ def api_create_bot():
             return jsonify({"status": "error", "success": False,
                             "message": "Invalid bot token format"}), 400
 
-        # Already live?
         for hid, e in hosted_by_id.items():
             if e.get("token") == token:
                 info = e.get("info", {})
@@ -2029,7 +2032,6 @@ def api_create_bot():
                     "message": f"Bot @{info.get('username')} already running",
                 })
 
-        # Clean stale registry entries
         for hid, reg in list(hosted_registry.items()):
             if reg.get("token") == token and hid not in hosted_by_id:
                 print(f"[API] Cleaning stale entry: {hid}")
@@ -2044,7 +2046,6 @@ def api_create_bot():
             except Exception:
                 pass
 
-        # 🔒 BLOCKING CALL — wait for real verification
         loop = ensure_loop()
         future = asyncio.run_coroutine_threadsafe(
             _create_hosted_bot_async(token, initial_owner, hosted_id),
@@ -2068,7 +2069,6 @@ def api_create_bot():
 
         print(f"[API] ✅ Deployed @{real_username}")
 
-        # Notify admin (non-blocking)
         async def _notify_admin():
             try:
                 await bot.send_message(
@@ -2115,7 +2115,6 @@ def api_list_bots():
         result = []
         seen = set()
 
-        # 1) hosted_bots
         for hid, entry in hosted_bots.get(owner_int, {}).items():
             if hid not in seen:
                 seen.add(hid)
@@ -2127,7 +2126,6 @@ def api_list_bots():
                     "running": entry.get("running", True),
                 })
 
-        # 2) get_owner()
         for hid, entry in hosted_by_id.items():
             if hid in seen:
                 continue
@@ -2145,7 +2143,6 @@ def api_list_bots():
             except Exception:
                 pass
 
-        # 3) owner_file
         for hid, entry in hosted_by_id.items():
             if hid in seen:
                 continue
@@ -2165,7 +2162,6 @@ def api_list_bots():
                 except Exception:
                     pass
 
-        # 4) registry
         for hid, reg in hosted_registry.items():
             if hid in seen:
                 continue
@@ -2391,7 +2387,7 @@ async def restore_bots_from_registry():
 async def main_start(message: types.Message):
     await bot.send_message(
         message.chat.id,
-        f"👑 KOHLI HOSTING BOT v8.0\n{DIVIDER}\n\n"
+        f"👑 KOHLI HOSTING BOT v8.1\n{DIVIDER}\n\n"
         f"🚀 Deploy & manage prediction bots.\n\n"
         f"📱 Use Web App to deploy.\n🔧 Admin: /admin",
         parse_mode="HTML",
@@ -2430,7 +2426,7 @@ async def main_resetdb(message: types.Message):
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_api():
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     print(f"[API] Starting Flask on port {port}")
     api_app.run(host="0.0.0.0", port=port, debug=False,
                 use_reloader=False, threaded=True)
@@ -2448,7 +2444,7 @@ async def shutdown():
 
 async def main():
     print("\n" + "=" * 60)
-    print("👑 KOHLI HOSTING + PREDICTION BOT v8.0")
+    print("👑 KOHLI HOSTING + PREDICTION BOT v8.1")
     print("=" * 60 + "\n")
 
     load_registry()
