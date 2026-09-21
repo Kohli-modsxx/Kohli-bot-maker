@@ -1,8 +1,7 @@
 # ============================================================
-# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v7.1
+# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v7.2
 # ============================================================
-# 🔧 FIXED: Fast deploy response, background bot launch
-# ✨ Async Architecture • Persistent Storage • Web API
+# ✨ Full Working • Fast Deploy • Persistent Storage
 # ⚔️ Dragon Track | 🤖 Adaptive Quant | 🔑 Seed Hash Decrypter
 # ============================================================
 
@@ -14,6 +13,7 @@ import math
 import hashlib
 import time
 import threading
+import traceback
 from datetime import datetime
 from collections import deque, Counter
 
@@ -30,7 +30,7 @@ from telebot.apihelper import ApiTelegramException
 # CONFIGURATION
 # ──────────────────────────────────────────────────────────────────────────────
 
-HOST_BOT_TOKEN = "8766089087:AAGk1LLZkbOoaz15MiuwfMF3xomTRD_XxtE"
+HOST_BOT_TOKEN = "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o"
 ADMIN_ID = 7741897793
 
 FIREBASE_URL = "https://glowbet-1b2ce-default-rtdb.firebaseio.com"
@@ -42,7 +42,7 @@ os.makedirs(DATA_DIR, exist_ok=True)
 REGISTRY_FILE = os.path.join(DATA_DIR, "hosted_registry.json")
 DATA_FILE = os.path.join(DATA_DIR, "bot_data.json")
 
-REQUEST_TIMEOUT = 60
+REQUEST_TIMEOUT = 90
 MAX_RETRIES = 10
 RETRY_DELAY = 3
 
@@ -70,18 +70,17 @@ hosted_bots = {}
 hosted_by_id = {}
 hosted_registry = {}
 
-# Dedicated event loop for all async operations (used by Flask threads)
+# Dedicated event loop for all async operations
 _async_loop = None
 _loop_thread = None
 _loop_ready = threading.Event()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# DEDICATED ASYNC LOOP (for Flask → Async bridging)
+# DEDICATED ASYNC LOOP
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _start_async_loop():
-    """Start a persistent event loop in a background thread."""
     global _async_loop
     _async_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(_async_loop)
@@ -90,24 +89,22 @@ def _start_async_loop():
 
 
 def ensure_loop():
-    """Make sure the background loop is running."""
     global _loop_thread
     if _loop_thread is None or not _loop_thread.is_alive():
+        _loop_ready.clear()
         _loop_thread = threading.Thread(target=_start_async_loop, daemon=True)
         _loop_thread.start()
         _loop_ready.wait(timeout=10)
     return _async_loop
 
 
-def run_async(coro, timeout=30):
-    """Run a coroutine on the background loop from a sync (Flask) context."""
+def run_async(coro, timeout=60):
     loop = ensure_loop()
     future = asyncio.run_coroutine_threadsafe(coro, loop)
     return future.result(timeout=timeout)
 
 
 def schedule_async(coro):
-    """Fire-and-forget coroutine on the background loop."""
     loop = ensure_loop()
     return asyncio.run_coroutine_threadsafe(coro, loop)
 
@@ -170,7 +167,7 @@ async def get_http():
     global _http_client
     if _http_client is None or _http_client.is_closed:
         _http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=15.0),
+            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=20.0),
             limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
         )
     return _http_client
@@ -493,7 +490,7 @@ async def next_period():
 
 async def wait_for_result(period_str):
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + 120
+    deadline = loop.time() + 150
     while loop.time() < deadline:
         records = await fetch_history()
         for r in records:
@@ -1407,11 +1404,74 @@ async def smart_predict(records, session):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# HOSTED BOT — FACTORY (FAST DEPLOY)
+# HELP TEXT
+# ──────────────────────────────────────────────────────────────────────────────
+
+HELP_TEXT = (
+    "❓ KOHLI VIP BOT HELP\n" + DIVIDER + "\n\n"
+    "⚙️ Commands:\n• /start — Bot start\n• /predict — Start prediction\n"
+    "• /add @Channel — Add channel\n• /help — Help\n• /cancel — Cancel\n\n"
+    "📢 Auto Channel Setup:\nMake bot Admin in your channel → Auto detect!\n\n"
+    "⚖️ Levels: Capped at L2 across all engines\n\n"
+    "📊 Engines:\n"
+    "• ⚔️ Server 1 — Dragon Track (HTML Engine)\n"
+    "• 🤖 Server 2 — Adaptive Quant Engine\n"
+    "• 🔑 Server 3 — Seed Hash Decrypter\n\n"
+    "📞 Support: @xxLEGEND_KOHLI"
+)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CIPHER
+# ──────────────────────────────────────────────────────────────────────────────
+
+def encode_cid(channel_id: str) -> str:
+    cid = str(channel_id).replace("-100", "").lstrip("-")
+    try:
+        return hex(int(cid))[2:]
+    except Exception:
+        return cid
+
+
+def decode_cid(token: str) -> str:
+    try:
+        return f"-100{int(token, 16)}"
+    except Exception:
+        return token
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# USER STATS HELPER
+# ──────────────────────────────────────────────────────────────────────────────
+
+def update_user_stats(user_id, file_path):
+    if not file_path:
+        return
+    users = {}
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r") as f:
+                users = json.load(f)
+        except Exception:
+            users = {}
+    now = datetime.now().strftime("%Y-%m-%d")
+    if str(user_id) not in users:
+        users[str(user_id)] = {"first_seen": now, "last_seen": now, "usage_count": 1}
+    else:
+        users[str(user_id)]["last_seen"] = now
+        users[str(user_id)]["usage_count"] += 1
+    try:
+        with open(file_path, "w") as f:
+            json.dump(users, f, indent=2)
+    except Exception:
+        pass
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# HOSTED BOT — HANDLERS
 # ──────────────────────────────────────────────────────────────────────────────
 
 def _register_hosted_handlers(state):
-    """Register all handlers on a hosted bot."""
     hosted = state["hosted"]
     active_dict = state["active_sessions"]
     user_states = state["user_states"]
@@ -1433,6 +1493,7 @@ def _register_hosted_handlers(state):
             if entry_ref[0] is not None:
                 hosted_bots.setdefault(uid, {})[state["hosted_id"]] = entry_ref[0]
             update_registry_owner(state["hosted_id"], uid)
+            print(f"[OWNER] Bot owner set: {uid}")
         except Exception as e:
             print(f"[OWNER] Save failed: {e}")
 
@@ -1446,34 +1507,43 @@ def _register_hosted_handlers(state):
 
     @hosted.message_handler(commands=["start"])
     async def cmd_start(message: types.Message):
-        if not os.path.exists(get_owner_file()) or not current_owner["id"]:
-            save_owner(message.from_user.id)
-        if current_owner["id"] and entry_ref[0] is not None:
-            hosted_bots.setdefault(current_owner["id"], {})[state["hosted_id"]] = entry_ref[0]
+        try:
+            if not os.path.exists(get_owner_file()) or not current_owner["id"]:
+                save_owner(message.from_user.id)
+            if current_owner["id"] and entry_ref[0] is not None:
+                hosted_bots.setdefault(current_owner["id"], {})[state["hosted_id"]] = entry_ref[0]
 
-        update_user_stats(message.from_user.id, get_user_file())
+            update_user_stats(message.from_user.id, get_user_file())
 
-        await hosted.send_message(
-            message.chat.id,
-            f"🎯 Welcome, {message.from_user.first_name}!\n\n"
-            f"{DIVIDER}\n"
-            f"🤖 KOHLI VIP PREDICTION BOT v7.1\n"
-            f"⚔️ Server 1: Dragon HTML Engine\n"
-            f"🤖 Server 2: Adaptive Quant Engine\n"
-            f"🔑 Server 3: Seed Hash Decrypter\n"
-            f"{DIVIDER}\n\nUse options below 👇",
-            parse_mode="HTML",
-            reply_markup=user_kb(),
-        )
+            await hosted.send_message(
+                message.chat.id,
+                f"🎯 Welcome, {message.from_user.first_name}!\n\n"
+                f"{DIVIDER}\n"
+                f"🤖 KOHLI VIP PREDICTION BOT\n"
+                f"⚔️ Server 1: Dragon HTML Engine\n"
+                f"🤖 Server 2: Adaptive Quant Engine\n"
+                f"🔑 Server 3: Seed Hash Decrypter\n"
+                f"{DIVIDER}\n\nUse options below 👇",
+                parse_mode="HTML",
+                reply_markup=user_kb(),
+            )
+        except Exception as e:
+            print(f"[START] Error: {e}")
 
     @hosted.message_handler(commands=["help"])
     async def cmd_help(message: types.Message):
-        await hosted.send_message(message.chat.id, HELP_TEXT, parse_mode="HTML")
+        try:
+            await hosted.send_message(message.chat.id, HELP_TEXT, parse_mode="HTML")
+        except Exception:
+            pass
 
     @hosted.message_handler(commands=["cancel"])
     async def cmd_cancel(message: types.Message):
         user_states.pop(message.from_user.id, None)
-        await hosted.send_message(message.chat.id, "❌ Flow cancelled.")
+        try:
+            await hosted.send_message(message.chat.id, "❌ Flow cancelled.")
+        except Exception:
+            pass
 
     @hosted.message_handler(commands=["predict"])
     async def cmd_predict(message: types.Message):
@@ -1509,21 +1579,21 @@ def _register_hosted_handlers(state):
 
     @hosted.my_chat_member_handler()
     async def on_my_chat_member(update: types.ChatMemberUpdated):
-        new_status = update.new_chat_member.status
-        old_status = update.old_chat_member.status if update.old_chat_member else 'left'
-        if new_status != 'administrator' or old_status == 'administrator':
-            return
-        await asyncio.sleep(2)
-        chat = update.chat
-        channel_id = chat.id
-        channel_uname = f"@{chat.username}" if chat.username else str(channel_id)
-        channel_title = chat.title or channel_uname
-        promoted_by = update.from_user.id if update.from_user else None
-        if not promoted_by:
-            return
-        added = await add_channel(promoted_by, channel_uname, channel_id, True)
-        if added:
-            try:
+        try:
+            new_status = update.new_chat_member.status
+            old_status = update.old_chat_member.status if update.old_chat_member else 'left'
+            if new_status != 'administrator' or old_status == 'administrator':
+                return
+            await asyncio.sleep(2)
+            chat = update.chat
+            channel_id = chat.id
+            channel_uname = f"@{chat.username}" if chat.username else str(channel_id)
+            channel_title = chat.title or channel_uname
+            promoted_by = update.from_user.id if update.from_user else None
+            if not promoted_by:
+                return
+            added = await add_channel(promoted_by, channel_uname, channel_id, True)
+            if added:
                 kb = types.InlineKeyboardMarkup()
                 kb.row(types.InlineKeyboardButton(
                     "🚀 Start Prediction Now!",
@@ -1535,131 +1605,134 @@ def _register_hosted_handlers(state):
                     f"🔗 <code>{channel_uname}</code>\n"
                     f"🆔 <code>{channel_id}</code>\n{DIVIDER}\n\n🎉 👇",
                     parse_mode="HTML", reply_markup=kb)
-            except Exception as e:
-                print(f"❌ Auto-detect notify failed: {e}")
+        except Exception as e:
+            print(f"[AUTO-DETECT] Error: {e}")
 
     @hosted.message_handler(func=lambda m: True)
     async def on_text(message: types.Message):
         user_id = message.from_user.id
-        text = message.text.strip()
+        text = message.text.strip() if message.text else ""
         s = user_states.get(user_id)
 
         if text.startswith("/"):
             return
 
-        if text == "❓ Help":
-            await hosted.send_message(message.chat.id, HELP_TEXT, parse_mode="HTML")
-            return
-
-        if text == "📞 Support":
-            await hosted.send_message(message.chat.id,
-                "📞 <b>Support</b>\n\n👤 Owner: @xxLEGEND_KOHLI", parse_mode="HTML")
-            return
-
-        if text == "🚀 Start Prediction":
-            await _trigger_start(hosted, message, user_id, state)
-            return
-
-        if text == "➕ Add Channel":
-            await hosted.send_message(message.chat.id,
-                "📢 Add Channel:\n\n• Bot ko channel ka Admin banayein.\n"
-                "• Manual: <code>/add @ChannelUsername</code>", parse_mode="HTML")
-            return
-
-        if text == "📊 My Channels":
-            channels = await get_channels(user_id)
-            if not channels:
-                await hosted.send_message(message.chat.id, "❌ No channels!")
-                return
-            resp = f"📊 Your Channels ({len(channels)})\n{DIVIDER}\n\n"
-            for i, ch in enumerate(channels, 1):
-                sN = ch.get('total_sessions', 0)
-                w = ch.get('total_wins', 0)
-                l = ch.get('total_losses', 0)
-                rate = f"{round(w / (w + l) * 100)}%" if (w + l) > 0 else "N/A"
-                resp += (f"<b>{i}. {ch['channel_link']}</b>\n🆔 <code>{ch['channel_id']}</code>\n"
-                         f"🎮 {sN} | ✅ {w} | ❌ {l} | 📈 {rate}\n{DIVIDER}\n\n")
-            await hosted.send_message(message.chat.id, resp, parse_mode="HTML")
-            return
-
-        if text == "🗑 Remove Channel":
-            channels = await get_channels(user_id)
-            if not channels:
-                await hosted.send_message(message.chat.id, "❌ No channels.")
-                return
-            kb = types.InlineKeyboardMarkup()
-            for ch in channels:
-                cid = encode_cid(ch['channel_id'])
-                kb.row(types.InlineKeyboardButton(f"📢 {ch['channel_link']}",
-                                                   callback_data=f"manage_{cid}"))
-            kb.row(types.InlineKeyboardButton("❌ Cancel", callback_data="cancel"))
-            await hosted.send_message(message.chat.id, "🗑 Remove Channel:",
-                                       reply_markup=kb)
-            return
-
-        if text == "📈 My Stats":
-            channels = await get_channels(user_id)
-            total_w = sum(c.get('total_wins', 0) for c in channels)
-            total_l = sum(c.get('total_losses', 0) for c in channels)
-            total_s = sum(c.get('total_sessions', 0) for c in channels)
-            rate = f"{round(total_w / (total_w + total_l) * 100)}%" if (total_w + total_l) > 0 else "N/A"
-            await hosted.send_message(message.chat.id,
-                f"📈 Statistics\n{DIVIDER}\n\n"
-                f"📢 Channels : {len(channels)}\n🎮 Sessions : {total_s}\n"
-                f"✅ Wins : {total_w}\n❌ Losses : {total_l}\n📊 Rate : {rate}\n{DIVIDER}",
-                parse_mode="HTML")
-            return
-
-        if text == "🛑 Stop Prediction":
-            if user_id not in active_dict:
-                await hosted.send_message(message.chat.id, "❌ No session!")
-                return
-            sess = active_dict[user_id]
-            if sess.get('_ending'):
-                return
-            sess['stop_flag'] = True
-            task = sess.get('task')
-            if task and not task.done():
-                task.cancel()
-            await hosted.send_message(message.chat.id, "🛑 Stopped!")
-            return
-
-        if isinstance(s, dict) and s.get("step") == "select_bets":
-            if not text.isdigit() or not (1 <= int(text) <= 50):
-                await hosted.send_message(message.chat.id, "❌ 1-50 only!")
-                return
-            bets = int(text)
-            server = s["server"]
-            channel_link = s["channel_link"]
-            channel_id = s["channel_id"]
-            user_states.pop(user_id, None)
-
-            if user_id in active_dict:
-                await hosted.send_message(message.chat.id, "⚠️ Already running.")
+        try:
+            if text == "❓ Help":
+                await hosted.send_message(message.chat.id, HELP_TEXT, parse_mode="HTML")
                 return
 
-            active_dict[user_id] = {
-                'channel_link': channel_link, 'channel_id': channel_id,
-                'server': server, 'max_bets': bets, 'max_level': 2,
-                'current_bet': 0, 'current_level': 1,
-                'consecutive_losses': 0, 'consecutive_wins': 0,
-                'win_streak': 0, 'max_win_streak': 0, 'max_loss_streak': 0,
-                'stop_flag': False, 'wins': 0, 'losses': 0,
-                'started_at': datetime.now().strftime("%d-%m-%Y %I:%M %p"),
-                'recent_results': [], '_ending': False,
-            }
-            await save_session_db(user_id, active_dict[user_id])
+            if text == "📞 Support":
+                await hosted.send_message(message.chat.id,
+                    "📞 <b>Support</b>\n\n👤 Owner: @xxLEGEND_KOHLI", parse_mode="HTML")
+                return
 
-            sname = {"1": "⚔️ Dragon Track", "2": "🤖 Adaptive Quant",
-                     "3": "🔑 Seed H-Decryptor"}.get(server, server)
+            if text == "🚀 Start Prediction":
+                await _trigger_start(hosted, message, user_id, state)
+                return
 
-            await hosted.send_message(message.chat.id,
-                f"✅ Session Ready!\n{DIVIDER}\n\n"
-                f"📢 {channel_link}\n🖥 {sname}\n🎯 {bets} Rounds\n\n🔥 Starting...",
-                parse_mode="HTML")
-            task = asyncio.create_task(
-                _prediction_loop(hosted, user_id, channel_link, server, state))
-            active_dict[user_id]['task'] = task
+            if text == "➕ Add Channel":
+                await hosted.send_message(message.chat.id,
+                    "📢 Add Channel:\n\n• Bot ko channel ka Admin banayein.\n"
+                    "• Manual: <code>/add @ChannelUsername</code>", parse_mode="HTML")
+                return
+
+            if text == "📊 My Channels":
+                channels = await get_channels(user_id)
+                if not channels:
+                    await hosted.send_message(message.chat.id, "❌ No channels!")
+                    return
+                resp = f"📊 Your Channels ({len(channels)})\n{DIVIDER}\n\n"
+                for i, ch in enumerate(channels, 1):
+                    sN = ch.get('total_sessions', 0)
+                    w = ch.get('total_wins', 0)
+                    l = ch.get('total_losses', 0)
+                    rate = f"{round(w / (w + l) * 100)}%" if (w + l) > 0 else "N/A"
+                    resp += (f"<b>{i}. {ch['channel_link']}</b>\n🆔 <code>{ch['channel_id']}</code>\n"
+                             f"🎮 {sN} | ✅ {w} | ❌ {l} | 📈 {rate}\n{DIVIDER}\n\n")
+                await hosted.send_message(message.chat.id, resp, parse_mode="HTML")
+                return
+
+            if text == "🗑 Remove Channel":
+                channels = await get_channels(user_id)
+                if not channels:
+                    await hosted.send_message(message.chat.id, "❌ No channels.")
+                    return
+                kb = types.InlineKeyboardMarkup()
+                for ch in channels:
+                    cid = encode_cid(ch['channel_id'])
+                    kb.row(types.InlineKeyboardButton(f"📢 {ch['channel_link']}",
+                                                       callback_data=f"manage_{cid}"))
+                kb.row(types.InlineKeyboardButton("❌ Cancel", callback_data="cancel"))
+                await hosted.send_message(message.chat.id, "🗑 Remove Channel:",
+                                           reply_markup=kb)
+                return
+
+            if text == "📈 My Stats":
+                channels = await get_channels(user_id)
+                total_w = sum(c.get('total_wins', 0) for c in channels)
+                total_l = sum(c.get('total_losses', 0) for c in channels)
+                total_s = sum(c.get('total_sessions', 0) for c in channels)
+                rate = f"{round(total_w / (total_w + total_l) * 100)}%" if (total_w + total_l) > 0 else "N/A"
+                await hosted.send_message(message.chat.id,
+                    f"📈 Statistics\n{DIVIDER}\n\n"
+                    f"📢 Channels : {len(channels)}\n🎮 Sessions : {total_s}\n"
+                    f"✅ Wins : {total_w}\n❌ Losses : {total_l}\n📊 Rate : {rate}\n{DIVIDER}",
+                    parse_mode="HTML")
+                return
+
+            if text == "🛑 Stop Prediction":
+                if user_id not in active_dict:
+                    await hosted.send_message(message.chat.id, "❌ No session!")
+                    return
+                sess = active_dict[user_id]
+                if sess.get('_ending'):
+                    return
+                sess['stop_flag'] = True
+                task = sess.get('task')
+                if task and not task.done():
+                    task.cancel()
+                await hosted.send_message(message.chat.id, "🛑 Stopped!")
+                return
+
+            if isinstance(s, dict) and s.get("step") == "select_bets":
+                if not text.isdigit() or not (1 <= int(text) <= 50):
+                    await hosted.send_message(message.chat.id, "❌ 1-50 only!")
+                    return
+                bets = int(text)
+                server = s["server"]
+                channel_link = s["channel_link"]
+                channel_id = s["channel_id"]
+                user_states.pop(user_id, None)
+
+                if user_id in active_dict:
+                    await hosted.send_message(message.chat.id, "⚠️ Already running.")
+                    return
+
+                active_dict[user_id] = {
+                    'channel_link': channel_link, 'channel_id': channel_id,
+                    'server': server, 'max_bets': bets, 'max_level': 2,
+                    'current_bet': 0, 'current_level': 1,
+                    'consecutive_losses': 0, 'consecutive_wins': 0,
+                    'win_streak': 0, 'max_win_streak': 0, 'max_loss_streak': 0,
+                    'stop_flag': False, 'wins': 0, 'losses': 0,
+                    'started_at': datetime.now().strftime("%d-%m-%Y %I:%M %p"),
+                    'recent_results': [], '_ending': False,
+                }
+                await save_session_db(user_id, active_dict[user_id])
+
+                sname = {"1": "⚔️ Dragon Track", "2": "🤖 Adaptive Quant",
+                         "3": "🔑 Seed H-Decryptor"}.get(server, server)
+
+                await hosted.send_message(message.chat.id,
+                    f"✅ Session Ready!\n{DIVIDER}\n\n"
+                    f"📢 {channel_link}\n🖥 {sname}\n🎯 {bets} Rounds\n\n🔥 Starting...",
+                    parse_mode="HTML")
+                task = asyncio.create_task(
+                    _prediction_loop(hosted, user_id, channel_link, server, state))
+                active_dict[user_id]['task'] = task
+        except Exception as e:
+            print(f"[ON_TEXT] Error: {e}")
 
     @hosted.callback_query_handler(func=lambda c: True)
     async def on_callback(cq: types.CallbackQuery):
@@ -1791,6 +1864,7 @@ def _register_hosted_handlers(state):
                 return
 
         except Exception as e:
+            print(f"[CALLBACK] Error: {e}")
             try:
                 await safe_edit(hosted, cq.message, f"❌ Error: <code>{str(e)[:150]}</code>")
             except Exception:
@@ -1827,124 +1901,6 @@ async def _trigger_start(hosted, message, user_id, state):
             reply_markup=kb)
     except Exception as e:
         await safe_edit(hosted, loading_msg, f"❌ Error: <code>{str(e)[:150]}</code>")
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# HOSTED BOT — CREATION (FAST, NON-BLOCKING)
-# ──────────────────────────────────────────────────────────────────────────────
-
-async def _create_hosted_bot_async(token, initial_owner, hosted_id):
-    """Async: create + launch a hosted bot."""
-    print(f"[CREATE] Starting bot creation: {hosted_id}")
-    try:
-        hosted = AsyncTeleBot(token)
-        hosted.request_timeout = REQUEST_TIMEOUT
-
-        # Get bot info (this is the slow part)
-        me = await asyncio.wait_for(hosted.get_me(), timeout=20)
-        print(f"[CREATE] Bot info: @{me.username} (ID: {me.id})")
-
-        # Prepare state
-        owner_file = os.path.join(DATA_DIR, f"owner_{hosted_id}.txt")
-        user_file = os.path.join(DATA_DIR, f"users_{me.id}.json")
-
-        # Load owner
-        current_owner = {"id": initial_owner}
-        if os.path.exists(owner_file):
-            try:
-                with open(owner_file, "r") as f:
-                    saved = f.read().strip()
-                    if saved:
-                        current_owner["id"] = int(saved)
-            except Exception:
-                pass
-
-        if hosted_id in hosted_registry:
-            reg_owner = hosted_registry[hosted_id].get("owner_id", "")
-            if reg_owner and reg_owner.lstrip("-").isdigit():
-                current_owner["id"] = int(reg_owner)
-
-        state = {
-            "hosted": hosted,
-            "active_sessions": {},
-            "user_states": {},
-            "runtime": {"paused": False},
-            "current_owner": current_owner,
-            "entry_ref": [None],
-            "me": me,
-            "owner_file": owner_file,
-            "user_file": user_file,
-            "hosted_id": hosted_id,
-            "token": token,
-        }
-
-        _register_hosted_handlers(state)
-
-        entry = {
-            "token": token,
-            "info": {"username": me.username, "id": me.id},
-            "running": True,
-            "runtime": state["runtime"],
-            "hosted_id": hosted_id,
-            "owner_file": owner_file,
-            "user_file": user_file,
-            "get_owner": lambda: state["current_owner"]["id"],
-            "state": state,
-        }
-        state["entry_ref"][0] = entry
-        hosted_by_id[hosted_id] = entry
-
-        # Persist registry
-        register_bot(hosted_id, current_owner["id"], me.username, me.id, token)
-
-        if current_owner["id"]:
-            hosted_bots.setdefault(current_owner["id"], {})[hosted_id] = entry
-
-        # Start polling in background
-        asyncio.create_task(_poll_hosted(hosted, me.username))
-
-        print(f"[CREATE] Bot @{me.username} deployed successfully")
-        return entry
-
-    except asyncio.TimeoutError:
-        print(f"[CREATE] Timeout for {hosted_id}")
-        raise RuntimeError("Token verification timed out. Check your token.")
-    except Exception as e:
-        print(f"[CREATE] Failed: {e}")
-        raise
-
-
-async def _poll_hosted(hosted_bot, username):
-    try:
-        await hosted_bot.polling(non_stop=True, allowed_updates=util.update_types,
-                                  request_timeout=REQUEST_TIMEOUT)
-    except Exception as e:
-        print(f"[HOSTED @{username}] Polling error: {e}")
-
-
-def start_hosted_prediction_bot(token, initial_owner, hosted_id):
-    """Sync wrapper — schedules bot creation in background loop."""
-    ensure_loop()
-    future = schedule_async(_create_hosted_bot_async(token, initial_owner, hosted_id))
-    return future
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# HELP TEXT
-# ──────────────────────────────────────────────────────────────────────────────
-
-HELP_TEXT = (
-    "❓ KOHLI VIP BOT HELP\n" + DIVIDER + "\n\n"
-    "⚙️ Commands:\n• /start — Bot start\n• /predict — Start prediction\n"
-    "• /add @Channel — Add channel\n• /help — Help\n• /cancel — Cancel\n\n"
-    "📢 Auto Channel Setup:\nMake bot Admin in your channel → Auto detect!\n\n"
-    "⚖️ Levels: Capped at L2 across all engines\n\n"
-    "📊 Engines:\n"
-    "• ⚔️ Server 1 — Dragon Track (HTML Engine)\n"
-    "• 🤖 Server 2 — Adaptive Quant Engine\n"
-    "• 🔑 Server 3 — Seed Hash Decrypter\n\n"
-    "📞 Support: @xxLEGEND_KOHLI"
-)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2065,6 +2021,8 @@ async def _prediction_loop(hosted, user_id, channel_link, server, state):
     except asyncio.CancelledError:
         await _end_session(hosted, user_id, channel, "🛑 SESSION TERMINATED", state)
     except Exception as e:
+        print(f"[PREDICTION_LOOP] Error: {e}")
+        traceback.print_exc()
         await _end_session(hosted, user_id, channel,
                             f"⚠️ ERROR: {str(e)[:80]}", state)
 
@@ -2113,53 +2071,127 @@ async def _end_session(hosted, user_id, channel, reason, state):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# CIPHER
+# HOSTED BOT — CREATION (WITH SYNC WAIT)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def encode_cid(channel_id: str) -> str:
-    cid = str(channel_id).replace("-100", "").lstrip("-")
+async def _create_hosted_bot_async(token, initial_owner, hosted_id):
+    """Async: create + launch a hosted bot."""
+    print(f"[CREATE] Starting bot creation: {hosted_id}")
+
     try:
-        return hex(int(cid))[2:]
-    except Exception:
-        return cid
+        hosted = AsyncTeleBot(token)
+        hosted.request_timeout = REQUEST_TIMEOUT
+
+        # Get bot info with retry
+        me = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                print(f"[CREATE] Verifying token (attempt {attempt+1}/3)...")
+                me = await asyncio.wait_for(hosted.get_me(), timeout=25)
+                print(f"[CREATE] ✅ Bot info: @{me.username} (ID: {me.id})")
+                break
+            except asyncio.TimeoutError:
+                last_err = "Timeout"
+                print(f"[CREATE] Timeout on attempt {attempt+1}")
+                await asyncio.sleep(2)
+            except Exception as e:
+                last_err = str(e)
+                print(f"[CREATE] Error on attempt {attempt+1}: {e}")
+                await asyncio.sleep(2)
+
+        if me is None:
+            raise RuntimeError(f"Token verification failed: {last_err}")
+
+        owner_file = os.path.join(DATA_DIR, f"owner_{hosted_id}.txt")
+        user_file = os.path.join(DATA_DIR, f"users_{me.id}.json")
+
+        current_owner = {"id": initial_owner}
+        if os.path.exists(owner_file):
+            try:
+                with open(owner_file, "r") as f:
+                    saved = f.read().strip()
+                    if saved:
+                        current_owner["id"] = int(saved)
+            except Exception:
+                pass
+
+        if hosted_id in hosted_registry:
+            reg_owner = hosted_registry[hosted_id].get("owner_id", "")
+            if reg_owner and reg_owner.lstrip("-").isdigit():
+                current_owner["id"] = int(reg_owner)
+
+        state = {
+            "hosted": hosted,
+            "active_sessions": {},
+            "user_states": {},
+            "runtime": {"paused": False},
+            "current_owner": current_owner,
+            "entry_ref": [None],
+            "me": me,
+            "owner_file": owner_file,
+            "user_file": user_file,
+            "hosted_id": hosted_id,
+            "token": token,
+        }
+
+        _register_hosted_handlers(state)
+
+        entry = {
+            "token": token,
+            "info": {"username": me.username, "id": me.id},
+            "running": True,
+            "runtime": state["runtime"],
+            "hosted_id": hosted_id,
+            "owner_file": owner_file,
+            "user_file": user_file,
+            "get_owner": lambda: state["current_owner"]["id"],
+            "state": state,
+        }
+        state["entry_ref"][0] = entry
+        hosted_by_id[hosted_id] = entry
+
+        # Register with REAL username
+        register_bot(hosted_id, current_owner["id"], me.username, me.id, token)
+
+        if current_owner["id"]:
+            hosted_bots.setdefault(current_owner["id"], {})[hosted_id] = entry
+
+        # Start polling
+        asyncio.create_task(_poll_hosted(hosted, me.username))
+
+        print(f"[CREATE] ✅ Bot @{me.username} deployed successfully")
+        return entry
+
+    except Exception as e:
+        print(f"[CREATE] ❌ FAILED for {hosted_id}: {e}")
+        traceback.print_exc()
+        raise
 
 
-def decode_cid(token: str) -> str:
+async def _poll_hosted(hosted_bot, username):
+    print(f"[HOSTED @{username}] Starting polling...")
     try:
-        return f"-100{int(token, 16)}"
-    except Exception:
-        return token
+        await hosted_bot.polling(
+            non_stop=True,
+            allowed_updates=util.update_types,
+            request_timeout=REQUEST_TIMEOUT,
+            skip_pending=True,
+        )
+    except asyncio.CancelledError:
+        print(f"[HOSTED @{username}] Polling cancelled")
+    except Exception as e:
+        print(f"[HOSTED @{username}] ❌ Polling error: {e}")
+
+
+def start_hosted_prediction_bot(token, initial_owner, hosted_id):
+    """Sync wrapper — schedules creation."""
+    ensure_loop()
+    return schedule_async(_create_hosted_bot_async(token, initial_owner, hosted_id))
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# USER STATS HELPERS
-# ──────────────────────────────────────────────────────────────────────────────
-
-def update_user_stats(user_id, file_path):
-    if not file_path:
-        return
-    users = {}
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, "r") as f:
-                users = json.load(f)
-        except Exception:
-            users = {}
-    now = datetime.now().strftime("%Y-%m-%d")
-    if str(user_id) not in users:
-        users[str(user_id)] = {"first_seen": now, "last_seen": now, "usage_count": 1}
-    else:
-        users[str(user_id)]["last_seen"] = now
-        users[str(user_id)]["usage_count"] += 1
-    try:
-        with open(file_path, "w") as f:
-            json.dump(users, f, indent=2)
-    except Exception:
-        pass
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# FLASK API — FAST RESPONSE
+# FLASK API
 # ──────────────────────────────────────────────────────────────────────────────
 
 api_app = Flask(__name__)
@@ -2170,7 +2202,7 @@ def home():
     return jsonify({
         "status": "online",
         "service": "KOHLI Premium Hosting",
-        "version": "7.1",
+        "version": "7.2",
         "hosted_bots": len(hosted_by_id),
         "registry_count": len(hosted_registry),
         "active_sessions": len(active_sessions),
@@ -2180,7 +2212,7 @@ def home():
 
 @api_app.route("/api/create_bot", methods=["POST"])
 def api_create_bot():
-    """FAST deploy — returns immediately, bot launches in background."""
+    """Deploy bot — waits for token verification then returns real info."""
     try:
         data = request.get_json() or {}
         token = (data.get("token") or "").strip()
@@ -2188,7 +2220,7 @@ def api_create_bot():
 
         if not token or ":" not in token or len(token) < 30:
             return jsonify({"status": "error", "success": False,
-                            "message": "Invalid bot token"}), 400
+                            "message": "Invalid bot token format"}), 400
 
         # Already running?
         for hid, e in hosted_by_id.items():
@@ -2202,16 +2234,11 @@ def api_create_bot():
                     "message": "Bot already running",
                 })
 
-        # Already registered?
-        for hid, reg in hosted_registry.items():
-            if reg.get("token") == token:
-                return jsonify({
-                    "status": "ok", "success": True,
-                    "username": reg.get("username", "Bot"),
-                    "bot_id": reg.get("bot_id", ""),
-                    "hosted_id": hid,
-                    "message": "Bot already registered",
-                })
+        # Already in registry but not running — remove stale entry
+        for hid, reg in list(hosted_registry.items()):
+            if reg.get("token") == token and hid not in hosted_by_id:
+                print(f"[API] Removing stale registry entry: {hid}")
+                unregister_bot(hid)
 
         hosted_id = f"bot_{int(time.time())}_{random.randint(1000, 9999)}"
 
@@ -2222,38 +2249,60 @@ def api_create_bot():
             except Exception:
                 pass
 
-        # ✅ Schedule bot creation in background loop (NON-BLOCKING)
-        start_hosted_prediction_bot(token, initial_owner, hosted_id)
+        print(f"[API] Deploy request: {hosted_id}")
 
-        # Notify admin (background — non-blocking)
+        # ✅ SYNC WAIT (up to 45s) for real username
+        loop = ensure_loop()
+        future = asyncio.run_coroutine_threadsafe(
+            _create_hosted_bot_async(token, initial_owner, hosted_id),
+            loop
+        )
+
+        try:
+            entry = future.result(timeout=45)
+        except Exception as e:
+            print(f"[API] Deploy FAILED: {e}")
+            return jsonify({
+                "status": "error",
+                "success": False,
+                "message": f"Bot launch failed: {str(e)[:200]}"
+            }), 500
+
+        info = entry.get("info", {})
+        real_username = info.get("username", "unknown")
+        real_bot_id = info.get("id", 0)
+
+        # Notify admin
         async def _notify_admin():
             try:
                 await bot.send_message(
                     ADMIN_ID,
                     f"{DIVIDER}\n🔑 NEW BOT DEPLOYED\n{DIVIDER}\n\n"
-                    f"📦 Hosted: `{hosted_id}`\n"
-                    f"👤 Owner: `{initial_owner or 'pending /start'}`\n\n"
-                    f"{SUB_DIVIDER}\n⚠️ Owner assigned on /start\n\n"
-                    f"🚀 KOHLI Engine",
+                    f"🤖 @{real_username}\n"
+                    f"🆔 `{real_bot_id}`\n"
+                    f"📦 `{hosted_id}`\n"
+                    f"👤 `{initial_owner or 'pending /start'}`\n\n"
+                    f"{SUB_DIVIDER}\n🚀 KOHLI Engine",
                     parse_mode="Markdown",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[API] Admin notify failed: {e}")
 
         schedule_async(_notify_admin())
 
-        # ✅ RETURN IMMEDIATELY — bot creates in background
         return jsonify({
             "status": "ok", "success": True,
-            "username": "deploying",
-            "bot_id": "pending",
+            "username": real_username,
+            "bot_id": str(real_bot_id),
             "hosted_id": hosted_id,
-            "message": "Bot is deploying. Owner assigned on /start.",
+            "message": f"Bot @{real_username} deployed successfully",
         })
 
     except Exception as e:
+        print(f"[API] Unexpected: {e}")
+        traceback.print_exc()
         return jsonify({"status": "error", "success": False,
-                        "message": str(e)}), 500
+                        "message": str(e)[:200]}), 500
 
 
 @api_app.route("/api/list_bots", methods=["POST"])
@@ -2504,7 +2553,7 @@ def api_broadcast():
                 pass
             return sent, failed
 
-        sent, failed = run_async(_send_all(), timeout=120)
+        sent, failed = run_async(_send_all(), timeout=180)
 
         return jsonify({"status": "ok", "success": True,
                         "sent": sent, "failed": failed})
@@ -2530,11 +2579,11 @@ async def restore_bots_from_registry():
             owner_int = int(owner_id) if owner_id and str(owner_id).lstrip("-").isdigit() else None
             await _create_hosted_bot_async(token, owner_int, hid)
             restored += 1
-            print(f"[RESTORE] Restored @{reg.get('username')} ({hid})")
+            print(f"[RESTORE] ✅ @{reg.get('username')} ({hid})")
             await asyncio.sleep(2)
         except Exception as e:
-            print(f"[RESTORE] Failed {hid}: {e}")
-    print(f"[RESTORE] Total: {restored}")
+            print(f"[RESTORE] ❌ {hid}: {e}")
+    print(f"[RESTORE] Total restored: {restored}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -2545,9 +2594,9 @@ async def restore_bots_from_registry():
 async def main_start(message: types.Message):
     await bot.send_message(
         message.chat.id,
-        f"👑 KOHLI HOSTING BOT v7.1\n{DIVIDER}\n\n"
-        f"🚀 Deploy & manage your prediction bots.\n\n"
-        f"📱 Use the Web App to deploy bots!\n"
+        f"👑 KOHLI HOSTING BOT v7.2\n{DIVIDER}\n\n"
+        f"🚀 Deploy & manage prediction bots.\n\n"
+        f"📱 Use Web App to deploy.\n"
         f"🔧 Admin: /admin",
         parse_mode="HTML",
     )
@@ -2564,7 +2613,7 @@ async def main_admin(message: types.Message):
         f"📦 Registered: {len(hosted_registry)}\n"
         f"🟢 Live: {len(hosted_by_id)}\n"
         f"🔥 Sessions: {len(active_sessions)}\n\n"
-        f"/resetdb — Wipe users data",
+        f"/resetdb — Wipe data",
         parse_mode="HTML",
     )
 
@@ -2581,19 +2630,15 @@ async def main_resetdb(message: types.Message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# API RUNNER
+# RUNNERS
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_api():
     port = int(os.environ.get("PORT", 5000))
     print(f"[API] Starting Flask on port {port}")
-    api_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False,
-                threaded=True)
+    api_app.run(host="0.0.0.0", port=port, debug=False,
+                use_reloader=False, threaded=True)
 
-
-# ──────────────────────────────────────────────────────────────────────────────
-# MAIN
-# ──────────────────────────────────────────────────────────────────────────────
 
 async def shutdown():
     print("\n⏳ Shutting down...")
@@ -2607,8 +2652,7 @@ async def shutdown():
 
 async def main():
     print("\n" + "=" * 60)
-    print("👑 KOHLI HOSTING + PREDICTION BOT v7.1")
-    print("   🚀 Fast Deploy + Persistent Storage")
+    print("👑 KOHLI HOSTING + PREDICTION BOT v7.2")
     print("=" * 60 + "\n")
 
     load_registry()
@@ -2635,14 +2679,11 @@ async def main():
                 print(f"❌ Failed: {e}")
                 return
 
-    # Restore bots in background
     asyncio.create_task(restore_bots_from_registry())
-
-    # Warm up HTTP client
     await get_http()
 
     print("✅ HOST BOT ONLINE")
-    print(f"📡 Polling with timeout: {REQUEST_TIMEOUT}s")
+    print(f"📡 Polling timeout: {REQUEST_TIMEOUT}s")
 
     try:
         await bot.polling(non_stop=True, allowed_updates=util.update_types,
@@ -2654,20 +2695,16 @@ async def main():
 
 
 if __name__ == "__main__":
-    # Start dedicated async loop FIRST
     ensure_loop()
     print("[BOOT] Async loop started")
 
-    # Start Flask API in background thread
     threading.Thread(target=run_api, daemon=True).start()
     time.sleep(1)
 
-    # Run main bot
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\n🛑 Terminated.")
     except Exception as e:
         print(f"\n❌ Crash: {e}")
-        import traceback
         traceback.print_exc()
