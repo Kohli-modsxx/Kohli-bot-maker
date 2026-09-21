@@ -1,7 +1,8 @@
 # ============================================================
-# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v5.0
+# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v6.0
 # ============================================================
 # ✨ Enhanced UI • Premium Animations • Pro Design
+# 🔧 FIXED: Persistent storage, owner assignment, bot list
 # ============================================================
 
 import telebot
@@ -18,6 +19,7 @@ from flask import Flask, request, jsonify
 # ============================================================
 # 🔧 MAIN CONFIG
 # ============================================================
+
 HOST_BOT_TOKEN = "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o"
 ADMIN_ID = 7741897793
 
@@ -26,6 +28,7 @@ bot = telebot.TeleBot(HOST_BOT_TOKEN, parse_mode="Markdown")
 # ============================================================
 # 🎨 DESIGN CONSTANTS (Premium UI Elements)
 # ============================================================
+
 DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━"
 SUB_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
 SPARKLE = "✨"
@@ -41,64 +44,125 @@ SHIELD = "🛡️"
 BRAIN = "🧠"
 
 # Animation frames for loading effect
-LOADING_FRAMES = ["▱▱▱▱▱", "▰▱▱▱▱", "▰▰▱▱▱", "▰▰▰▱▱", "▰▰▰▰▱", "▰▰▰▰▰"]
 PROGRESS_BAR = ["🟥⬜⬜⬜⬜", "🟥🟥⬜⬜⬜", "🟥🟥🟥⬜⬜", "🟥🟥🟥🟥⬜", "🟥🟥🟥🟥🟥"]
+
+# ============================================================
+# 📁 PERSISTENT STORAGE DIRECTORY
+# ============================================================
+
+DATA_DIR = os.environ.get("DATA_DIR", "kohli_data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+
+def data_path(filename):
+    """Return path inside persistent data directory."""
+    return os.path.join(DATA_DIR, filename)
+
 
 # ============================================================
 # 🌐 GLOBAL STORAGE
 # ============================================================
-awaiting_token_from = set()
-hosted_bots = {}
-hosted_by_id = {}
+
+hosted_bots = {}       # { owner_id: { hosted_id: entry } }
+hosted_by_id = {}      # { hosted_id: entry }
+hosted_registry = {}   # { hosted_id: { owner_id, username, bot_id, token } }
+registry_file = data_path("hosted_registry.json")
+
+
+# ============================================================
+# 💾 REGISTRY PERSISTENCE (survives server restart)
+# ============================================================
+
+def load_registry():
+    global hosted_registry
+    if os.path.exists(registry_file):
+        try:
+            with open(registry_file, "r") as f:
+                hosted_registry = json.load(f)
+            print(f"[REGISTRY] Loaded {len(hosted_registry)} entries")
+        except Exception as e:
+            print(f"[REGISTRY] Load failed: {e}")
+            hosted_registry = {}
+
+
+def save_registry():
+    try:
+        with open(registry_file, "w") as f:
+            json.dump(hosted_registry, f, indent=2)
+    except Exception as e:
+        print(f"[REGISTRY] Save failed: {e}")
+
+
+def register_bot(hosted_id, owner_id, username, bot_id, token):
+    """Register bot metadata persistently."""
+    hosted_registry[hosted_id] = {
+        "owner_id": str(owner_id) if owner_id else "",
+        "username": username,
+        "bot_id": str(bot_id),
+        "token": token,
+        "created_at": datetime.now().isoformat(),
+    }
+    save_registry()
+
+
+def update_registry_owner(hosted_id, owner_id):
+    """Update owner in registry."""
+    if hosted_id in hosted_registry:
+        hosted_registry[hosted_id]["owner_id"] = str(owner_id)
+        save_registry()
+
+
+def unregister_bot(hosted_id):
+    if hosted_id in hosted_registry:
+        del hosted_registry[hosted_id]
+        save_registry()
+
+
+# Load registry at startup
+load_registry()
+
 
 # ============================================================
 # 🎬 ANIMATION HELPERS
 # ============================================================
+
 def animate_loading(bot_obj, chat_id, text, frames=None, delay=0.4):
     """Plays a short loading animation by editing a message."""
     frames = frames or PROGRESS_BAR
     try:
-        msg = bot_obj.send_message(chat_id, f"{SPARKLE} *{text}*\n\n`{frames[0]}`")
+        msg = bot_obj.send_message(chat_id, f"{SPARKLE} {text}\n\n{frames[0]}")
         for frame in frames[1:]:
             time.sleep(delay)
             try:
                 bot_obj.edit_message_text(
-                    f"{SPARKLE} *{text}*\n\n`{frame}`",
+                    f"{SPARKLE} {text}\n\n{frame}",
                     chat_id=chat_id,
                     message_id=msg.message_id,
-                    parse_mode="Markdown"
+                    parse_mode="Markdown",
                 )
-            except:
+            except Exception:
                 pass
         time.sleep(0.3)
         try:
             bot_obj.delete_message(chat_id, msg.message_id)
-        except:
+        except Exception:
             pass
-    except:
+    except Exception:
         pass
 
 
 def styled_header(title, emoji=CROWN):
-    """Returns a premium styled header."""
-    return (
-        f"{DIVIDER}\n"
-        f"{emoji} *{title}*\n"
-        f"{DIVIDER}"
-    )
+    return f"{DIVIDER}\n{emoji} {title}\n{DIVIDER}"
 
 
 def styled_footer(text="KOHLI PREMIUM ENGINE"):
-    """Returns a premium styled footer."""
-    return (
-        f"{SUB_DIVIDER}\n"
-        f"{LIGHTNING} _{text}_ {LIGHTNING}"
-    )
+    return f"{SUB_DIVIDER}\n{LIGHTNING} {text} {LIGHTNING}"
 
 
 # ============================================================
-# 🔮 PREDICTION ENGINE (Enhanced)
+# 🔮 PREDICTION ENGINE
 # ============================================================
+
 def generate_prediction():
     num = random.randint(0, 9)
     if num >= 5:
@@ -132,7 +196,6 @@ def send_prediction(bot_obj, chat_id, period, big_small, num, image, trend):
     now = datetime.now(ist)
     timestamp = now.strftime("%d %b %Y • %I:%M:%S %p")
 
-    # Visual confidence bar
     confidence = random.randint(88, 99)
     filled = int(confidence / 10)
     bar = "🟩" * filled + "⬜" * (10 - filled)
@@ -162,13 +225,14 @@ def send_prediction(bot_obj, chat_id, period, big_small, num, image, trend):
 # ============================================================
 # 📊 USER STATS
 # ============================================================
+
 def load_users(file_path):
     if not os.path.exists(file_path):
         return {}
     with open(file_path, "r") as f:
         try:
             return json.load(f)
-        except:
+        except Exception:
             return {}
 
 
@@ -201,18 +265,19 @@ def get_stats(file_path):
                 day1 += 1
             elif delta == 1:
                 day2 += 1
-        except:
+        except Exception:
             pass
     top_list = "\n".join(
-        [f"  {i+1}. 👤 `{uid}` — *{info['usage_count']}* uses"
+        [f"  {i+1}. 👤 {uid} — {info['usage_count']} uses"
          for i, (uid, info) in enumerate(top_users[:5])]
-    ) or "  _No users yet._"
+    ) or "  No users yet."
     return len(users), day1, day2, top_list
 
 
 # ============================================================
 # 🧠 HOSTED PREDICTION BOT (WITH AUTO OWNER)
 # ============================================================
+
 def start_hosted_prediction_bot(token, initial_owner, hosted_id):
     try:
         hosted = telebot.TeleBot(token, parse_mode="Markdown")
@@ -222,19 +287,26 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
 
     active_dict = {}
     user_channels = {}
-    user_file = f"users_{me.id}.json"
-    owner_file = f"owner_{hosted_id}.txt"
+    user_file = data_path(f"users_{me.id}.json")
+    owner_file = data_path(f"owner_{hosted_id}.txt")
     runtime = {"paused": False}
     current_owner = {"id": initial_owner}
 
+    # Load owner from file (persistent)
     if os.path.exists(owner_file):
         try:
             with open(owner_file, "r") as f:
                 saved = f.read().strip()
                 if saved:
                     current_owner["id"] = int(saved)
-        except:
+        except Exception:
             pass
+
+    # Also load owner from registry
+    if hosted_id in hosted_registry:
+        reg_owner = hosted_registry[hosted_id].get("owner_id", "")
+        if reg_owner and reg_owner.lstrip("-").isdigit():
+            current_owner["id"] = int(reg_owner)
 
     def save_owner(uid):
         try:
@@ -242,6 +314,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f.write(str(uid))
             current_owner["id"] = uid
             hosted_bots.setdefault(uid, {})[hosted_id] = _entry_ref[0]
+            update_registry_owner(hosted_id, uid)
             print(f"[OWNER] Bot {me.username} owner set to {uid}")
         except Exception as e:
             print(f"[OWNER] Save failed: {e}")
@@ -281,8 +354,13 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
     # ---------- /start ----------
     @hosted.message_handler(commands=["start"])
     def start(msg):
+        # Auto-assign owner on first /start
         if not os.path.exists(owner_file) or not current_owner["id"]:
             save_owner(msg.from_user.id)
+
+        # Ensure linked in hosted_bots
+        if current_owner["id"]:
+            hosted_bots.setdefault(current_owner["id"], {})[hosted_id] = _entry_ref[0]
 
         update_user_stats(msg.from_user.id, user_file)
 
@@ -322,7 +400,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                     cid,
                     f"{BELL} *Already Running!*\n{SUB_DIVIDER}\n"
                     f"{LIGHTNING} Your prediction engine is already active.",
-                    reply_markup=create_prediction_menu()
+                    reply_markup=create_prediction_menu(),
                 )
                 return
             active_dict[cid] = True
@@ -341,7 +419,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f"{SUB_DIVIDER}\n"
                 f"{TARGET} Predictions will now stream every 60s.\n\n"
                 f"{styled_footer()}",
-                reply_markup=create_prediction_menu()
+                reply_markup=create_prediction_menu(),
             )
             threading.Thread(
                 target=start_prediction_cycle,
@@ -361,7 +439,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f"{SUB_DIVIDER}\n"
                 f"Press 🎯 START to resume anytime.\n\n"
                 f"{styled_footer()}",
-                reply_markup=create_prediction_menu()
+                reply_markup=create_prediction_menu(),
             )
 
         # 📢 SET CHANNEL
@@ -375,7 +453,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f"Example: `@yourchannel`\n\n"
                 f"{SHIELD} _Bot must be admin in the channel._\n\n"
                 f"{styled_footer()}",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
             user_channels[cid] = "waiting"
 
@@ -396,7 +474,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f"{SUB_DIVIDER}\n"
                 f"{top}\n\n"
                 f"{styled_footer()}",
-                reply_markup=create_prediction_menu()
+                reply_markup=create_prediction_menu(),
             )
 
         # 👑 DEVELOPER
@@ -404,7 +482,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             markup = types.InlineKeyboardMarkup(row_width=1)
             markup.add(
                 types.InlineKeyboardButton("💬 Contact Developer", url="https://t.me/xxLEGEND_KOHLI"),
-                types.InlineKeyboardButton("📢 Join Updates Channel", url="https://t.me/xxLEGEND_KOHLI")
+                types.InlineKeyboardButton("📢 Join Updates Channel", url="https://t.me/xxLEGEND_KOHLI"),
             )
             hosted.send_message(
                 cid,
@@ -417,7 +495,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f"{SUB_DIVIDER}\n"
                 f"💬 Need a custom bot? Reach out below!\n\n"
                 f"{styled_footer()}",
-                reply_markup=markup
+                reply_markup=markup,
             )
 
         # 💎 PREMIUM INFO
@@ -437,7 +515,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 f"{SUB_DIVIDER}\n"
                 f"👑 Contact @xxLEGEND_KOHLI for Premium\n\n"
                 f"{styled_footer()}",
-                reply_markup=create_prediction_menu()
+                reply_markup=create_prediction_menu(),
             )
 
         # CHANNEL INPUT
@@ -457,7 +535,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                     f"{ROCKET} Predictions will now auto-post there!\n\n"
                     f"{styled_footer()}",
                     parse_mode="Markdown",
-                    reply_markup=create_prediction_menu()
+                    reply_markup=create_prediction_menu(),
                 )
             except Exception as e:
                 hosted.send_message(
@@ -468,7 +546,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                     f"Error: `{e}`\n\n"
                     f"{SHIELD} Make sure bot is *admin* in the channel.\n\n"
                     f"{styled_footer()}",
-                    reply_markup=create_prediction_menu()
+                    reply_markup=create_prediction_menu(),
                 )
                 user_channels[cid] = None
 
@@ -489,10 +567,15 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
         "runtime": runtime,
         "hosted_id": hosted_id,
         "owner_file": owner_file,
+        "user_file": user_file,
         "get_owner": get_owner,
     }
     _entry_ref[0] = entry
     hosted_by_id[hosted_id] = entry
+
+    # Register persistently
+    register_bot(hosted_id, initial_owner, me.username, me.id, token)
+
     if initial_owner:
         hosted_bots.setdefault(initial_owner, {})[hosted_id] = entry
 
@@ -502,6 +585,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
 # ============================================================
 # 🌐 FLASK API
 # ============================================================
+
 api_app = Flask(__name__)
 
 
@@ -510,9 +594,10 @@ def home():
     return jsonify({
         "status": "online",
         "service": "KOHLI Premium Hosting",
-        "version": "5.0",
+        "version": "6.0",
         "hosted_bots": sum(len(b) for b in hosted_bots.values()),
-        "timestamp": datetime.now().isoformat()
+        "registry_count": len(hosted_registry),
+        "timestamp": datetime.now().isoformat(),
     })
 
 
@@ -521,10 +606,12 @@ def api_create_bot():
     try:
         data = request.get_json() or {}
         token = (data.get("token") or "").strip()
+        telegram_id = data.get("telegram_id") or data.get("owner_id")
 
         if not token or ":" not in token or len(token) < 30:
             return jsonify({"status": "error", "message": "Invalid bot token format"}), 400
 
+        # Check if bot already running
         for hid, e in hosted_by_id.items():
             if e.get("token") == token:
                 return jsonify({
@@ -532,11 +619,34 @@ def api_create_bot():
                     "username": e["info"]["username"],
                     "bot_id": e["info"]["id"],
                     "hosted_id": hid,
-                    "message": "Bot already running"
+                    "message": "Bot already running",
                 })
 
-        hosted_id = f"bot_{int(time.time())}_{random.randint(1000,9999)}"
+        # Check registry for existing bot
+        for hid, reg in hosted_registry.items():
+            if reg.get("token") == token:
+                return jsonify({
+                    "status": "ok",
+                    "username": reg.get("username", "Bot"),
+                    "bot_id": reg.get("bot_id", ""),
+                    "hosted_id": hid,
+                    "message": "Bot already registered",
+                })
+
+        hosted_id = f"bot_{int(time.time())}_{random.randint(1000, 9999)}"
         entry = start_hosted_prediction_bot(token, None, hosted_id)
+
+        # Auto-assign owner if telegram_id provided
+        if telegram_id:
+            try:
+                owner_int = int(str(telegram_id).strip())
+                entry["get_owner"] = lambda: owner_int
+                with open(entry["owner_file"], "w") as f:
+                    f.write(str(owner_int))
+                hosted_bots.setdefault(owner_int, {})[hosted_id] = entry
+                update_registry_owner(hosted_id, owner_int)
+            except Exception as e:
+                print(f"[AUTO-OWNER] Failed: {e}")
 
         try:
             bot.send_message(
@@ -550,17 +660,18 @@ def api_create_bot():
                 f"{SUB_DIVIDER}\n"
                 f"⚠️ Owner assigned on first /start\n\n"
                 f"{styled_footer()}",
-                parse_mode="Markdown"
+                parse_mode="Markdown",
             )
         except Exception as e:
             print(f"[!] Admin notify failed: {e}")
 
         return jsonify({
             "status": "ok",
+            "success": True,
             "username": entry["info"]["username"],
             "bot_id": entry["info"]["id"],
             "hosted_id": hosted_id,
-            "message": "Bot created successfully"
+            "message": "Bot created successfully",
         })
 
     except Exception as e:
@@ -571,7 +682,7 @@ def api_create_bot():
 def api_list_bots():
     try:
         data = request.get_json() or {}
-        owner_id = str(data.get("owner_id") or "").strip()
+        owner_id = str(data.get("owner_id") or data.get("telegram_id") or data.get("user_id") or "").strip()
 
         if not owner_id or not owner_id.lstrip("-").isdigit():
             return jsonify({"status": "error", "message": "Invalid owner"}), 400
@@ -580,6 +691,7 @@ def api_list_bots():
         result = []
         seen = set()
 
+        # 1) hosted_bots dict
         for hid, entry in hosted_bots.get(owner_int, {}).items():
             if hid not in seen:
                 seen.add(hid)
@@ -587,9 +699,10 @@ def api_list_bots():
                     "username": entry["info"]["username"],
                     "bot_id": str(entry["info"]["id"]),
                     "hosted_id": str(hid),
-                    "running": entry.get("running", True)
+                    "running": entry.get("running", True),
                 })
 
+        # 2) owner_file check (persistent)
         for hid, entry in hosted_by_id.items():
             if hid in seen:
                 continue
@@ -603,12 +716,42 @@ def api_list_bots():
                                 "username": entry["info"]["username"],
                                 "bot_id": str(entry["info"]["id"]),
                                 "hosted_id": str(hid),
-                                "running": entry.get("running", True)
+                                "running": entry.get("running", True),
                             })
-                except:
+                except Exception:
                     pass
 
-        return jsonify({"status": "ok", "bots": result, "count": len(result)})
+        # 3) get_owner() check
+        for hid, entry in hosted_by_id.items():
+            if hid in seen:
+                continue
+            try:
+                get_owner = entry.get("get_owner")
+                if get_owner and str(get_owner()) == owner_id:
+                    seen.add(hid)
+                    result.append({
+                        "username": entry["info"]["username"],
+                        "bot_id": str(entry["info"]["id"]),
+                        "hosted_id": str(hid),
+                        "running": entry.get("running", True),
+                    })
+            except Exception:
+                pass
+
+        # 4) Registry check (survives restart)
+        for hid, reg in hosted_registry.items():
+            if hid in seen:
+                continue
+            if str(reg.get("owner_id", "")) == owner_id:
+                seen.add(hid)
+                result.append({
+                    "username": reg.get("username", "Bot"),
+                    "bot_id": str(reg.get("bot_id", "")),
+                    "hosted_id": str(hid),
+                    "running": hid in hosted_by_id,
+                })
+
+        return jsonify({"status": "ok", "success": True, "bots": result, "count": len(result)})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -630,12 +773,12 @@ def api_toggle_bot():
             entry["running"] = False
             if "runtime" in entry:
                 entry["runtime"]["paused"] = True
-            return jsonify({"status": "ok", "running": False})
+            return jsonify({"status": "ok", "success": True, "running": False})
         elif action == "on":
             entry["running"] = True
             if "runtime" in entry:
                 entry["runtime"]["paused"] = False
-            return jsonify({"status": "ok", "running": True})
+            return jsonify({"status": "ok", "success": True, "running": True})
         else:
             return jsonify({"status": "error", "message": "Invalid action"}), 400
 
@@ -649,27 +792,35 @@ def api_delete_bot():
         data = request.get_json() or {}
         hosted_id = (data.get("hosted_id") or "").strip()
 
-        if hosted_id not in hosted_by_id:
+        if hosted_id not in hosted_by_id and hosted_id not in hosted_registry:
             return jsonify({"status": "error", "message": "Bot not found"}), 404
 
-        entry = hosted_by_id[hosted_id]
-        entry["running"] = False
-        if "runtime" in entry:
-            entry["runtime"]["paused"] = True
+        if hosted_id in hosted_by_id:
+            entry = hosted_by_id[hosted_id]
+            entry["running"] = False
+            if "runtime" in entry:
+                entry["runtime"]["paused"] = True
+            del hosted_by_id[hosted_id]
+        else:
+            entry = {}
 
-        del hosted_by_id[hosted_id]
-        for uid, bots in hosted_bots.items():
+        # Remove from hosted_bots
+        for uid, bots in list(hosted_bots.items()):
             if hosted_id in bots:
                 del bots[hosted_id]
 
-        owner_file = entry.get("owner_file")
+        # Remove owner file
+        owner_file = entry.get("owner_file") or data_path(f"owner_{hosted_id}.txt")
         if owner_file and os.path.exists(owner_file):
             try:
                 os.remove(owner_file)
-            except:
+            except Exception:
                 pass
 
-        return jsonify({"status": "ok", "message": "Deleted"})
+        # Remove from registry
+        unregister_bot(hosted_id)
+
+        return jsonify({"status": "ok", "success": True, "message": "Deleted"})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -691,11 +842,11 @@ def api_broadcast():
         entry = hosted_by_id[hosted_id]
         bot_id = entry["info"]["id"]
         token = entry.get("token")
-        user_file = f"users_{bot_id}.json"
+        user_file = data_path(f"users_{bot_id}.json")
         users = load_users(user_file)
 
         if not users:
-            return jsonify({"status": "ok", "sent": 0, "failed": 0})
+            return jsonify({"status": "ok", "success": True, "sent": 0, "failed": 0})
 
         broadcast_bot = telebot.TeleBot(token, parse_mode="Markdown")
         sent = 0
@@ -709,14 +860,14 @@ def api_broadcast():
                     f"📢 *BROADCAST MESSAGE*\n"
                     f"{DIVIDER}\n\n"
                     f"{message}\n\n"
-                    f"{styled_footer()}"
+                    f"{styled_footer()}",
                 )
                 sent += 1
                 time.sleep(0.05)
             except Exception:
                 failed += 1
 
-        return jsonify({"status": "ok", "sent": sent, "failed": failed})
+        return jsonify({"status": "ok", "success": True, "sent": sent, "failed": failed})
 
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
@@ -733,16 +884,17 @@ def api_bot_stats():
 
         entry = hosted_by_id[hosted_id]
         bot_id = entry["info"]["id"]
-        user_file = f"users_{bot_id}.json"
+        user_file = data_path(f"users_{bot_id}.json")
         total, d1, d2, _ = get_stats(user_file)
 
         return jsonify({
             "status": "ok",
+            "success": True,
             "total_users": total,
             "active_today": d1,
             "active_yesterday": d2,
             "running": entry.get("running", False),
-            "username": entry["info"]["username"]
+            "username": entry["info"]["username"],
         })
 
     except Exception as e:
@@ -750,21 +902,52 @@ def api_bot_stats():
 
 
 # ============================================================
+# 🔄 RESTORE BOTS FROM REGISTRY ON STARTUP
+# ============================================================
+
+def restore_bots_from_registry():
+    """Re-launch all bots that were running before restart."""
+    print("[RESTORE] Checking for bots to restore...")
+    restored = 0
+    for hid, reg in list(hosted_registry.items()):
+        token = reg.get("token")
+        owner_id = reg.get("owner_id")
+        if not token:
+            continue
+        try:
+            owner_int = int(owner_id) if owner_id and str(owner_id).lstrip("-").isdigit() else None
+            start_hosted_prediction_bot(token, owner_int, hid)
+            restored += 1
+            print(f"[RESTORE] Restored @{reg.get('username')} ({hid})")
+        except Exception as e:
+            print(f"[RESTORE] Failed to restore {hid}: {e}")
+    print(f"[RESTORE] Total restored: {restored}")
+
+
+# ============================================================
 # 🚀 RUN
 # ============================================================
+
 def run_api():
     port = int(os.environ.get("PORT", 5000))
     api_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
 
 
 if __name__ == "__main__":
-    threading.Thread(target=run_api, daemon=True).start()
     print("""
 ╔══════════════════════════════════════════════╗
-║   👑 KOHLI PREMIUM HOSTING BOT v5.0 👑      ║
+║   👑 KOHLI PREMIUM HOSTING BOT v6.0 👑      ║
 ║   🚀 Engine Online • Ready to Serve 🚀      ║
 ╚══════════════════════════════════════════════╝
-    """)
+""")
+
+    # Restore previously running bots
+    threading.Thread(target=restore_bots_from_registry, daemon=True).start()
+
+    # Start Flask API
+    threading.Thread(target=run_api, daemon=True).start()
+
+    # Main bot polling
     while True:
         try:
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
