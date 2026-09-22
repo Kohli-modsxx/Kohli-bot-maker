@@ -1,8 +1,8 @@
 # ============================================================
-# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v7.0
+# 👑 KOHLI HOSTING + PREDICTION BOT — PROFESSIONAL v7.1
 # ============================================================
 # ✨ Enhanced UI • Premium Animations • Pro Design
-# 🔧 FIXED: Persistent storage, owner assignment, bot list
+# 🔧 FIXED: New tokens, token validation, 401 handling
 # 🚀 RAILWAY OPTIMIZED: Single-file deploy, restore, port binding
 # 🧠 PREDICTION LOGIC: v4.1 Naithik VIP Engine (Preserved)
 # ============================================================
@@ -26,14 +26,16 @@ from telebot.apihelper import ApiTelegramException
 from flask import Flask, request, jsonify
 
 # ============================================================
-# 🔧 MAIN CONFIG
+# 🔧 MAIN CONFIG (UPDATED TOKENS)
 # ============================================================
 
-HOST_BOT_TOKEN = "8766089087:AAGqAnVxZnCmmhtL6NQvyXkuqcE6DV5rf7M"
+HOST_BOT_TOKEN = "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o"
 ADMIN_ID = 7741897793
 
-# Prediction engine (Naithik VIP) config
-PRED_BOT_TOKEN = "8766089087:AAFQ4hk4V27YtzWvzCSmWMRCJFZF_NWV8lg"
+# ✅ FIXED: New prediction bot token
+PRED_BOT_TOKEN = "8766089087:AAGqAnVxZnCmmhtL6NQvyXkuqcE6DV5rf7M"
+
+# Prediction engine config
 FIREBASE_URL = "https://glowbet-1b2ce-default-rtdb.firebaseio.com"
 HISTORY_API = "https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json"
 PRED_DATA_FILE = "bot_data.json"
@@ -42,7 +44,7 @@ REQUEST_TIMEOUT = 60
 MAX_RETRIES = 10
 RETRY_DELAY = 3
 
-# Host bot (async wrapper for notifications)
+# Host bot (sync)
 host_bot = telebot.TeleBot(HOST_BOT_TOKEN, parse_mode="Markdown")
 
 # Prediction bot (async)
@@ -89,15 +91,14 @@ def data_path(filename):
 
 
 # ============================================================
-# 🌐 GLOBAL STORAGE (HOSTING)
+# 🌐 GLOBAL STORAGE
 # ============================================================
 
-hosted_bots = {}       # { owner_id: { hosted_id: entry } }
-hosted_by_id = {}      # { hosted_id: entry }
-hosted_registry = {}   # { hosted_id: { owner_id, username, bot_id, token } }
+hosted_bots = {}
+hosted_by_id = {}
+hosted_registry = {}
 registry_file = data_path("hosted_registry.json")
 
-# Prediction engine runtime
 pred_user_states = {}
 pred_active_sessions = {}
 bot_data_cache = None
@@ -186,7 +187,7 @@ def styled_footer(text="KOHLI PREMIUM ENGINE"):
 
 
 # ============================================================
-# 🔮 PREDICTION ENGINE — HELPERS (Naithik VIP Engine Preserved)
+# 🔮 PREDICTION HELPERS
 # ============================================================
 
 def encode_cid(channel_id: str) -> str:
@@ -304,7 +305,7 @@ def build_session_summary(session, reason):
         status_line = f"⚠️ {reason}"
 
     sep = "━━━━━━━━━━━━━━━━━━━━━━━━"
-    summary = (
+    return (
         f"{sep}\n"
         f"☑️ 𝐍ᴀɪᴛɪᴋ 𝐏ʀɪᴠᴀᴛᴇ 𝐀ᴜᴛᴏ 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ ⚠️\n"
         f"{sep}\n\n"
@@ -322,7 +323,6 @@ def build_session_summary(session, reason):
         f"{sep}\n"
         f"🚀 𝐀𝐈 𝐏ᴏᴡᴇʀᴇᴅ 𝐁ʏ @OFFICIALNAITIK2"
     )
-    return summary
 
 
 # ============================================================
@@ -350,7 +350,7 @@ async def close_http():
 
 
 # ============================================================
-# 📊 PREDICTION PERSISTENCE (Firebase + Local)
+# 📊 PERSISTENCE
 # ============================================================
 
 async def pred_load_data():
@@ -473,7 +473,7 @@ async def get_all_pred_users():
 
 
 # ============================================================
-# 📈 HISTORY DATA PARSER
+# 📈 HISTORY PARSER
 # ============================================================
 
 async def fetch_history():
@@ -1037,18 +1037,13 @@ def _quant_core_predict(outcomes: list):
         sig = "❓ MINIMAL"
 
     meta = {
-        'edge': edge_final,
-        'entropy': ent,
+        'edge': edge_final, 'entropy': ent,
         'streak': (streak_val, streak_len),
         'top_factors': board.top_factors(4),
-        'cycle_block': cycle_block,
-        'block_score': block_score,
-        'anom': anom,
-        'cyc_period': cyc_period,
-        'cyc_strength': cyc_strength,
-        'alt_rate': alt_rate,
+        'cycle_block': cycle_block, 'block_score': block_score,
+        'anom': anom, 'cyc_period': cyc_period,
+        'cyc_strength': cyc_strength, 'alt_rate': alt_rate,
     }
-
     return prediction, confidence, sig, meta
 
 
@@ -1090,9 +1085,7 @@ def server1_dragon_predict(outcomes: list, raw_nums: list, level: int, session: 
         return None
 
     def _html_weighted_recency_fallback(hist):
-        if not hist:
-            return 'BIG'
-        return hist[0]
+        return hist[0] if hist else 'BIG'
 
     hist = outcomes
     pred = None
@@ -1137,74 +1130,54 @@ def server1_dragon_predict(outcomes: list, raw_nums: list, level: int, session: 
     base_conf = max(54, min(82, base_conf))
 
     if level == 1:
-        final_pred = pred
-        final_conf = base_conf
-        sig = f"L1/{stage_used}"
-    else:
-        votes = {'BIG': 0.0, 'SMALL': 0.0}
-        votes[pred] += 2.0
+        return pred, base_conf, f"L1/{stage_used}"
 
-        d6 = _html_density(hist, sample_size=6)
-        d10 = _html_density(hist, sample_size=10)
-        d20 = _html_density(hist, sample_size=20) if len(hist) >= 20 else None
-        if d6:
-            votes[d6] += 1.5
-        if d10:
-            votes[d10] += 1.5
-        if d20:
-            votes[d20] += 1.0
+    votes = {'BIG': 0.0, 'SMALL': 0.0}
+    votes[pred] += 2.0
 
-        if len(hist) >= 10:
-            recent5 = hist[:5]
-            recent10 = hist[:10]
-            r5_big = recent5.count('BIG') / 5.0
-            r10_big = recent10.count('BIG') / 10.0
-            drift = r5_big - r10_big
-            if abs(drift) >= 0.20:
-                revert = 'SMALL' if drift > 0 else 'BIG'
-                votes[revert] += 2.0
+    d6 = _html_density(hist, sample_size=6)
+    d10 = _html_density(hist, sample_size=10)
+    d20 = _html_density(hist, sample_size=20) if len(hist) >= 20 else None
+    if d6: votes[d6] += 1.5
+    if d10: votes[d10] += 1.5
+    if d20: votes[d20] += 1.0
 
-        if streak >= 4:
-            flip = 'SMALL' if hist[0] == 'BIG' else 'BIG'
-            votes[flip] += 2.5
-        elif streak >= 3:
-            flip = 'SMALL' if hist[0] == 'BIG' else 'BIG'
-            votes[flip] += 1.5
+    if len(hist) >= 10:
+        r5_big = hist[:5].count('BIG') / 5.0
+        r10_big = hist[:10].count('BIG') / 10.0
+        drift = r5_big - r10_big
+        if abs(drift) >= 0.20:
+            revert = 'SMALL' if drift > 0 else 'BIG'
+            votes[revert] += 2.0
 
-        if len(hist) >= 6:
-            alt_flips = sum(1 for i in range(5) if hist[i] != hist[i + 1])
-            if alt_flips >= 4:
-                next_alt = 'SMALL' if hist[0] == 'BIG' else 'BIG'
-                votes[next_alt] += 2.0
+    if streak >= 4:
+        votes['SMALL' if hist[0] == 'BIG' else 'BIG'] += 2.5
+    elif streak >= 3:
+        votes['SMALL' if hist[0] == 'BIG' else 'BIG'] += 1.5
 
-        if len(hist) >= 20:
-            window = hist[:20]
-            bg = window.count('BIG')
-            sm = window.count('SMALL')
-            if bg >= 15:
-                votes['SMALL'] += 2.0
-            elif sm >= 15:
-                votes['BIG'] += 2.0
+    if len(hist) >= 6:
+        alt_flips = sum(1 for i in range(5) if hist[i] != hist[i + 1])
+        if alt_flips >= 4:
+            votes['SMALL' if hist[0] == 'BIG' else 'BIG'] += 2.0
 
-        last_result = hist[0]
-        opp = 'SMALL' if last_result == 'BIG' else 'BIG'
-        votes[opp] += 1.0
+    if len(hist) >= 20:
+        bg = hist[:20].count('BIG')
+        sm = hist[:20].count('SMALL')
+        if bg >= 15: votes['SMALL'] += 2.0
+        elif sm >= 15: votes['BIG'] += 2.0
 
-        if len(hist) >= 30:
-            w30 = hist[:30]
-            bg30 = w30.count('BIG')
-            if bg30 >= 20:
-                votes['SMALL'] += 1.5
-            elif bg30 <= 10:
-                votes['BIG'] += 1.5
+    votes['SMALL' if hist[0] == 'BIG' else 'BIG'] += 1.0
 
-        final_pred = 'BIG' if votes['BIG'] >= votes['SMALL'] else 'SMALL'
-        total_v = votes['BIG'] + votes['SMALL']
-        edge = votes[final_pred] / total_v if total_v > 0 else 0.5
-        final_conf = min(88, max(60, int(50 + edge * 80)))
-        sig = f"L2-ExtremeAnalysis/{stage_used}"
+    if len(hist) >= 30:
+        bg30 = hist[:30].count('BIG')
+        if bg30 >= 20: votes['SMALL'] += 1.5
+        elif bg30 <= 10: votes['BIG'] += 1.5
 
-    return final_pred, int(final_conf), sig
+    final_pred = 'BIG' if votes['BIG'] >= votes['SMALL'] else 'SMALL'
+    total_v = votes['BIG'] + votes['SMALL']
+    edge = votes[final_pred] / total_v if total_v > 0 else 0.5
+    final_conf = min(88, max(60, int(50 + edge * 80)))
+    return final_pred, final_conf, f"L2-ExtremeAnalysis/{stage_used}"
 
 
 def server2_ultra_predict(outcomes: list, level: int, session: dict):
@@ -1257,27 +1230,21 @@ def server2_ultra_predict(outcomes: list, level: int, session: dict):
             return None
 
         html_dragon = _html_dragon_line(outcomes)
-        if html_dragon:
-            probe_votes[html_dragon] += 1.2
+        if html_dragon: probe_votes[html_dragon] += 1.2
 
         html_chop = _html_chop_chop(outcomes)
-        if html_chop:
-            probe_votes[html_chop] += 1.5
+        if html_chop: probe_votes[html_chop] += 1.5
 
         html_density = _html_density(outcomes)
-        if html_density:
-            probe_votes[html_density] += 1.0
+        if html_density: probe_votes[html_density] += 1.0
 
         streak_val, streak_len, _, _ = _streak_info(outcomes)
         if streak_len >= 5:
-            flip = 'SMALL' if streak_val == 'BIG' else 'BIG'
-            probe_votes[flip] += 2.5
+            probe_votes['SMALL' if streak_val == 'BIG' else 'BIG'] += 2.5
         elif streak_len >= 4:
-            flip = 'SMALL' if streak_val == 'BIG' else 'BIG'
-            probe_votes[flip] += 1.5
+            probe_votes['SMALL' if streak_val == 'BIG' else 'BIG'] += 1.5
         elif streak_len >= 3:
-            flip = 'SMALL' if streak_val == 'BIG' else 'BIG'
-            probe_votes[flip] += 0.8
+            probe_votes['SMALL' if streak_val == 'BIG' else 'BIG'] += 0.8
 
         ensemble_pred = max(probe_votes, key=probe_votes.get)
         avg_conf = round(sum(probe_confs) / len(probe_confs)) if probe_confs else 65
@@ -1293,86 +1260,83 @@ def server2_ultra_predict(outcomes: list, level: int, session: dict):
 
         return ensemble_pred, avg_conf, f"Ensemble-Ultra(agree={agree:.0%})"
 
+    board2 = _SignalBoard()
+    streak_val, streak_len, _, avg_run = _streak_info(outcomes)
+    flip = 'SMALL' if streak_val == 'BIG' else 'BIG'
+
+    if streak_len >= 4:
+        board2.add("L2-AntiStreak", flip, 4.0 + streak_len * 0.6)
+    elif streak_len >= 3:
+        board2.add("L2-AntiStreak", flip, 3.0)
+    elif streak_len == 2:
+        board2.add("L2-AntiStreak", flip, 1.8)
     else:
-        board2 = _SignalBoard()
-        streak_val, streak_len, _, avg_run = _streak_info(outcomes)
-        flip = 'SMALL' if streak_val == 'BIG' else 'BIG'
+        board2.add("L2-AntiStreak", flip, 1.0)
 
-        if streak_len >= 4:
-            board2.add("L2-AntiStreak", flip, 4.0 + streak_len * 0.6)
-        elif streak_len >= 3:
-            board2.add("L2-AntiStreak", flip, 3.0)
-        elif streak_len == 2:
-            board2.add("L2-AntiStreak", flip, 1.8)
-        else:
-            board2.add("L2-AntiStreak", flip, 1.0)
+    base, q_conf, q_sig, meta = _quant_core_predict(outcomes)
+    board2.add("L2-QuantBase", base, 2.0)
 
-        base, q_conf, q_sig, meta = _quant_core_predict(outcomes)
-        board2.add("L2-QuantBase", base, 2.0)
-
-        def _html_density(hist):
-            n = min(6, len(hist))
-            if n < 3:
-                return None
-            sample = hist[:n]
-            big_count = sample.count('BIG')
-            if big_count > n / 2:
-                return 'SMALL'
-            elif big_count < n / 2:
-                return 'BIG'
+    def _html_density(hist):
+        n = min(6, len(hist))
+        if n < 3:
             return None
+        sample = hist[:n]
+        big_count = sample.count('BIG')
+        if big_count > n / 2:
+            return 'SMALL'
+        elif big_count < n / 2:
+            return 'BIG'
+        return None
 
-        def _html_chop_chop(hist):
-            if len(hist) < 4:
-                return None
-            if (hist[0] != hist[1] and hist[1] == hist[2] and hist[2] != hist[3]):
-                return 'SMALL' if hist[0] == 'BIG' else 'BIG'
+    def _html_chop_chop(hist):
+        if len(hist) < 4:
             return None
+        if (hist[0] != hist[1] and hist[1] == hist[2] and hist[2] != hist[3]):
+            return 'SMALL' if hist[0] == 'BIG' else 'BIG'
+        return None
 
-        html_density = _html_density(outcomes)
-        if html_density:
-            board2.add("L2-HTML-Density", html_density, 1.5)
+    html_density = _html_density(outcomes)
+    if html_density: board2.add("L2-HTML-Density", html_density, 1.5)
 
-        html_chop = _html_chop_chop(outcomes)
-        if html_chop:
-            board2.add("L2-HTML-Chop", html_chop, 2.0)
+    html_chop = _html_chop_chop(outcomes)
+    if html_chop: board2.add("L2-HTML-Chop", html_chop, 2.0)
 
-        sim_probs, sim_conf = _historical_similarity(outcomes, lookback=6)
-        if sim_conf >= 0.35:
-            sim_pred = 'BIG' if sim_probs['BIG'] > 0.5 else 'SMALL'
-            board2.add("L2-HistSim", sim_pred, sim_conf * 3.5)
+    sim_probs, sim_conf = _historical_similarity(outcomes, lookback=6)
+    if sim_conf >= 0.35:
+        sim_pred = 'BIG' if sim_probs['BIG'] > 0.5 else 'SMALL'
+        board2.add("L2-HistSim", sim_pred, sim_conf * 3.5)
 
-        last3 = outcomes[:3]
-        if len(last3) == 3:
-            dom = 'BIG' if last3.count('BIG') >= 2 else 'SMALL'
-            board2.add("L2-Last3Flip", 'SMALL' if dom == 'BIG' else 'BIG', 2.2)
+    last3 = outcomes[:3]
+    if len(last3) == 3:
+        dom = 'BIG' if last3.count('BIG') >= 2 else 'SMALL'
+        board2.add("L2-Last3Flip", 'SMALL' if dom == 'BIG' else 'BIG', 2.2)
 
-        for win in [10, 20, 40]:
-            if len(outcomes) >= win:
-                br = _big_rate(outcomes[:win])
-                if br >= 0.65:
-                    board2.add(f"L2-FreqBal{win}", 'SMALL', (br - 0.5) * 4)
-                elif br <= 0.35:
-                    board2.add(f"L2-FreqBal{win}", 'BIG', (0.5 - br) * 4)
+    for win in [10, 20, 40]:
+        if len(outcomes) >= win:
+            br = _big_rate(outcomes[:win])
+            if br >= 0.65:
+                board2.add(f"L2-FreqBal{win}", 'SMALL', (br - 0.5) * 4)
+            elif br <= 0.35:
+                board2.add(f"L2-FreqBal{win}", 'BIG', (0.5 - br) * 4)
 
-        fib_v = _fibonacci_window_votes(outcomes)
-        for side in ('BIG', 'SMALL'):
-            if fib_v[side] > 0.10:
-                board2.add("L2-FibCross", side, fib_v[side] * 2.5)
+    fib_v = _fibonacci_window_votes(outcomes)
+    for side in ('BIG', 'SMALL'):
+        if fib_v[side] > 0.10:
+            board2.add("L2-FibCross", side, fib_v[side] * 2.5)
 
-        cyc_period, cyc_strength = _detect_cycle(outcomes, max_lag=24)
-        if cyc_period and cyc_strength >= 0.20:
-            phase = len(outcomes) % cyc_period
-            if phase < len(outcomes):
-                board2.add("L2-CyclePhase", outcomes[phase], cyc_strength * 2.5)
+    cyc_period, cyc_strength = _detect_cycle(outcomes, max_lag=24)
+    if cyc_period and cyc_strength >= 0.20:
+        phase = len(outcomes) % cyc_period
+        if phase < len(outcomes):
+            board2.add("L2-CyclePhase", outcomes[phase], cyc_strength * 2.5)
 
-        consec = session.get('consecutive_losses', 0)
-        if consec >= 1:
-            board2.add("L2-LossContext", base, min(2.5, 1.0 + consec * 0.5))
+    consec = session.get('consecutive_losses', 0)
+    if consec >= 1:
+        board2.add("L2-LossContext", base, min(2.5, 1.0 + consec * 0.5))
 
-        l2_pred = board2.leading()
-        l2_conf = min(90, max(56, board2.confidence_pct()))
-        return l2_pred, l2_conf, f"L2-ExtremeScan/{q_sig}"
+    l2_pred = board2.leading()
+    l2_conf = min(90, max(56, board2.confidence_pct()))
+    return l2_pred, l2_conf, f"L2-ExtremeScan/{q_sig}"
 
 
 def adaptive_engine_predict(outcomes: list, raw_nums: list, session: dict):
@@ -1396,11 +1360,9 @@ def adaptive_engine_predict(outcomes: list, raw_nums: list, session: dict):
     if recent_win_rate < 0.40:
         pred, conf, sig, meta = _quant_core_predict(outcomes)
         flipped_pred = "SMALL" if pred == "BIG" else "BIG"
-
         is_jackpot = False
         if len(raw_nums) >= 2:
             is_jackpot = (raw_nums[0] in [0, 5, 1, 9])
-
         return flipped_pred, max(55, conf - 5), "ADAPTIVE-COUNTER_TREND", is_jackpot, None
 
     pred, conf, sig, meta = _quant_core_predict(outcomes)
@@ -1440,7 +1402,7 @@ async def smart_predict(records, session):
 
 
 # ============================================================
-# 🎯 PREDICTION BOT UI (KEYBOARDS + SEND HELPERS)
+# 🎯 PREDICTION BOT UI
 # ============================================================
 
 def pred_user_kb():
@@ -1499,8 +1461,7 @@ async def send_sticker(target, sticker_id):
 
 
 async def send_win_sticker(target):
-    sticker = random.choice(STICKER_WIN_LIST)
-    await send_sticker(target, sticker)
+    await send_sticker(target, random.choice(STICKER_WIN_LIST))
 
 
 # ============================================================
@@ -1529,7 +1490,7 @@ async def prediction_loop(user_id, channel_link, server):
 
         intro = await pred_safe_send(channel,
             f"{sep}\n"
-            f"🤖 𝐍ᴀɪᴛɪᴋ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ\n"
+            f"🤖 𝐊ᴏʜʟɪ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ\n"
             f"{sep}\n"
             f"🖥 𝐒ᴇ r ᴠᴇ r : {server_name}\n"
             f"🎯 𝐋ɪᴍɪᴛ : {session['max_bets']} predictions\n"
@@ -1625,7 +1586,6 @@ async def end_session(user_id, channel, reason):
     session = pred_active_sessions.get(user_id)
     if not session:
         return
-
     if session.get('_ending'):
         return
     session['_ending'] = True
@@ -1699,8 +1659,8 @@ async def recover_pred_sessions():
                 task = asyncio.create_task(prediction_loop(user_id, channel_link, server))
                 pred_active_sessions[user_id]['task'] = task
                 await pred_safe_send(int(session.get('channel_id')),
-                    f"🛡 𝐒ʏsᴛᴇᴍ 𝐑ᴇᴄᴏ𝐕ᴇʀᴇ𝐃\n{'━'*22}\n"
-                    f"🤖 <b>𝐁ᴏᴛ 𝐑ᴇsᴛᴏ r ᴇᴅ.</b>\n🔄 𝐒ᴇssɪᴏɴ 𝐑ᴇsᴜᴍᴇᴅ!\n{'━'*22}")
+                    f"🛡 𝐒ʏsᴛᴇᴍ 𝐑ᴇᴄᴏᴠᴇʀᴇᴅ\n{'━'*22}\n"
+                    f"🤖 <b>𝐁ᴏᴛ 𝐑ᴇsᴛᴏʀᴇᴅ.</b>\n🔄 𝐒ᴇssɪᴏɴ 𝐑ᴇsᴜᴍᴇᴅ!\n{'━'*22}")
             except Exception:
                 pass
     except Exception:
@@ -1739,24 +1699,17 @@ async def on_my_chat_member_update(update: types.ChatMemberUpdated):
                 parse_mode="HTML", reply_markup=kb)
         except Exception as e:
             print(f"❌ Auto-detect notify failed: {e}")
-    else:
-        try:
-            await pred_bot.send_message(promoted_by,
-                f"ℹ️ <b>{channel_title}</b> pehle se list mein hai!\n'🚀 Start Prediction' dabao.",
-                parse_mode="HTML")
-        except Exception:
-            pass
 
 
 PRED_HELP_TEXT = (
-    "❓ 𝐍ᴀɪᴛɪᴋ 𝐕𝐈𝐏 𝐁ᴏᴛ 𝐇ᴇʟᴘ\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
+    "❓ 𝐊ᴏʜʟɪ 𝐕𝐈𝐏 𝐁ᴏᴛ 𝐇ᴇʟᴘ\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
     "⚙️ 𝐂ᴏᴍᴍᴀɴᴅs:\n• /start — Bot start\n• /predict — Start prediction\n"
     "• /add @Channel — Channel add\n• /help — Help menu\n• /cancel — Cancel flow\n\n"
     "📢 𝐀ᴜᴛᴏ 𝐂ʜᴀɴɴᴇʟ 𝐒ᴇᴛᴜᴘ:\nBot ko channel ka Admin banayein → Auto detect!\n\n"
     "⚖️ 𝐌ᴀ r ᴛɪɴɢᴀʟᴇ 𝐋ᴇᴠᴇʟs:\n"
     "• Capped at level 2 max across all modules\n\n"
-    "📊 𝐄𝐧ɢɪɴᴇs:\n"
-    "• ⚔️ 𝐒ᴇ r ᴠᴇ r 1 — Dhruv HTML Engine (Dragon+Chop+Density)\n"
+    "📊 𝐄ɴɢɪɴᴇs:\n"
+    "• ⚔️ 𝐒ᴇ r ᴠᴇ r 1 — Dragon Engine (Dragon+Chop+Density)\n"
     "• 🤖 𝐒ᴇ r ᴠᴇ r 2 — Adaptive Quant Engine (Ensemble Analysis)\n"
     "• 🔑 𝐒ᴇ r ᴠᴇ r 3 — Seed Hash Decrypter (Mathematical Hashing)\n\n"
     "📞 𝐒ᴜᴘᴘᴏ r ᴛ: @xxLEGEND_KOHLI"
@@ -1800,7 +1753,7 @@ async def pred_cmd_start(message: types.Message):
     kb = pred_admin_kb() if user_id == ADMIN_ID else pred_user_kb()
     await pred_bot.send_message(message.chat.id,
         f"🎯 𝐖ᴇʟᴄᴏᴍᴇ, {message.from_user.first_name}!\n\n{'━'*22}\n"
-        f"🤖 𝐍ᴀɪᴛɪᴋ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ 𝐁ᴏᴛ v4.0\n"
+        f"🤖 𝐊ᴏʜʟɪ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ 𝐁ᴏᴛ v4.1\n"
         f"⚔️ 𝐒ᴇ r ᴠᴇ r 1: Dragon HTML Engine\n"
         f"🤖 𝐒ᴇ r ᴠᴇ r 2: Adaptive Quant Engine\n"
         f"🔑 𝐒ᴇ r ᴠᴇ r 3: Seed Hash Decrypter\n{'━'*22}\n\n𝐔sᴇ ᴏᴘᴛɪᴏɴs ʙᴇʟᴏᴡ:",
@@ -1901,10 +1854,8 @@ async def run_pred_broadcast(sender_id: int, text: str):
                     await asyncio.sleep(1.5)
             except Exception:
                 await asyncio.sleep(1.5)
-        if success:
-            ok_dm += 1
-        else:
-            fail_dm += 1
+        if success: ok_dm += 1
+        else: fail_dm += 1
 
     for cid_str, clink in channel_ids_map.items():
         try:
@@ -1929,10 +1880,8 @@ async def run_pred_broadcast(sender_id: int, text: str):
                     await asyncio.sleep(1.5)
             except Exception:
                 await asyncio.sleep(1.5)
-        if success:
-            ok_ch += 1
-        else:
-            fail_ch += 1
+        if success: ok_ch += 1
+        else: fail_ch += 1
 
     return ok_dm, fail_dm, ok_ch, fail_ch
 
@@ -1957,7 +1906,7 @@ async def pred_on_text(message: types.Message):
     if text == "📞 Support":
         await pred_bot.send_message(message.chat.id,
             "📞 <b>𝐒ᴜᴘᴘᴏ r ᴛ</b>\n\n"
-            "💬 Contact our support lines for system integrations:\n\n"
+            "💬 Contact our support lines:\n\n"
             "👤 𝐎ᴡɴᴇ r : @xxLEGEND_KOHLI",
             parse_mode="HTML")
         return
@@ -2112,7 +2061,7 @@ async def pred_on_text(message: types.Message):
         elif server == "2":
             server_name = "🤖 𝐀ᴅᴀᴘᴛɪᴠᴇ 𝐐ᴜᴀɴᴛ"
         else:
-            server_name = "🔑 𝐒ᴇᴇᴅ 𝐇_𝐃ᴇᴄ r ʏᴘᴛᴏ r"
+            server_name = "🔑 𝐒ᴇᴇᴅ 𝐇ᴀsʜ 𝐃ᴇᴄʀʏᴘᴛᴏ𝐫"
 
         await pred_bot.send_message(message.chat.id,
             f"✅ 𝐒ᴇssɪᴏɴ 𝐑ᴇᴀᴅʏ!\n{'━'*22}\n\n"
@@ -2226,7 +2175,7 @@ async def pred_on_callback(cq: types.CallbackQuery):
             elif server == "2":
                 sname = "🤖 𝐀ᴅᴀᴘᴛɪᴠᴇ 𝐐ᴜᴀɴᴛ"
             else:
-                sname = "🔑 𝐒ᴇᴇᴅ 𝐇_𝐃ᴇᴄ r ʏᴘᴛᴏ r"
+                sname = "🔑 𝐒ᴇᴇᴅ 𝐇ᴀsʜ 𝐃ᴇᴄʀʏᴘᴛᴏ𝐫"
 
             pred_user_states[user_id] = {"step": "select_channel", "server": server, "channels": channels}
             await pred_safe_edit(cq.message,
@@ -2255,7 +2204,7 @@ async def pred_on_callback(cq: types.CallbackQuery):
             elif server == "2":
                 sname = "🤖 𝐀ᴅᴀᴘᴛɪᴠᴇ 𝐐ᴜᴀɴᴛ"
             else:
-                sname = "🔑 𝐒ᴇᴇᴅ 𝐇_𝐃ᴇᴄ r ʏᴘᴛᴏ r"
+                sname = "🔑 𝐒ᴇᴇᴅ 𝐇ᴀsʜ 𝐃ᴇᴄʀʏᴘᴛᴏ𝐫"
 
             await pred_safe_edit(cq.message,
                 f"🎯 𝐅ɪɴᴀʟ 𝐂ᴏɴꜰɪɢ\n{'━'*20}\n"
@@ -2276,10 +2225,6 @@ async def pred_on_callback(cq: types.CallbackQuery):
 # ============================================================
 
 def start_hosted_prediction_bot(token, initial_owner, hosted_id):
-    """
-    Deploys a hosted bot that runs the SAME prediction engine (v4.1 logic)
-    using synchronous telebot (runs in its own thread + async loop).
-    """
     try:
         hosted = telebot.TeleBot(token, parse_mode="HTML")
         me = hosted.get_me()
@@ -2320,7 +2265,6 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
     def get_owner():
         return current_owner["id"]
 
-    # ---------- HOSTED BOT MENU ----------
     def create_menu():
         kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
         kb.row("🎯 START PREDICTION", "🛑 STOP PREDICTION")
@@ -2328,11 +2272,11 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
         kb.row("👑 DEVELOPER", "💎 PREMIUM INFO")
         return kb
 
-    # ---------- HOSTED BOT: loading anim ----------
     def hosted_animate(chat_id, text, frames=None, delay=0.4):
         animate_loading(hosted, chat_id, text, frames, delay)
 
-    # ---------- HOSTED BOT: /start ----------
+    hosted_state = {"channel": None, "waiting_channel": False}
+
     @hosted.message_handler(commands=["start"])
     def hosted_start(msg):
         if not os.path.exists(owner_file) or not current_owner["id"]:
@@ -2340,7 +2284,6 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
         if current_owner["id"]:
             hosted_bots.setdefault(current_owner["id"], {})[hosted_id] = _entry_ref[0]
 
-        # Track user
         try:
             users = load_users_sync(user_file)
             now = datetime.now().strftime("%Y-%m-%d")
@@ -2375,21 +2318,15 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             f"{styled_footer()}"
         )
         try:
-            hosted.send_message(msg.chat.id, welcome, reply_markup=create_menu(),
-                                parse_mode="Markdown")
+            hosted.send_message(msg.chat.id, welcome, reply_markup=create_menu(), parse_mode="HTML")
         except Exception:
             hosted.send_message(msg.chat.id, welcome, reply_markup=create_menu())
 
-    # ---------- HOSTED BOT: state ----------
-    hosted_state = {"channel": None, "waiting_channel": False}
-
-    # ---------- HOSTED BOT: menu handler ----------
     @hosted.message_handler(func=lambda m: True)
     def hosted_buttons(msg):
         text = msg.text
         cid = msg.chat.id
 
-        # Track user
         try:
             users = load_users_sync(user_file)
             now = datetime.now().strftime("%Y-%m-%d")
@@ -2406,19 +2343,18 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
         if text == "🎯 START PREDICTION":
             hosted_animate(cid, "Booting Prediction Engine")
             ch = hosted_state.get("channel")
-            status = f"📢 Channel: `{ch}`" if ch else "⚠️ No channel linked"
+            status = f"📢 Channel: <code>{ch}</code>" if ch else "⚠️ No channel linked"
             try:
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n🚀 *PREDICTION ENGINE ONLINE*\n{DIVIDER}\n\n"
-                    f"✅ Status: *ACTIVE*\n{status}\n{SUB_DIVIDER}\n"
+                    f"{DIVIDER}\n🚀 <b>PREDICTION ENGINE ONLINE</b>\n{DIVIDER}\n\n"
+                    f"✅ Status: <b>ACTIVE</b>\n{status}\n{SUB_DIVIDER}\n"
                     f"🎯 Predictions will now stream every 60s.\n\n"
                     f"{styled_footer()}",
-                    reply_markup=create_menu(), parse_mode="Markdown")
+                    reply_markup=create_menu(), parse_mode="HTML")
             except Exception:
                 pass
 
-            # Start async prediction cycle in background thread
             thread = threading.Thread(
                 target=run_hosted_prediction_cycle_sync,
                 args=(hosted, cid, ch, runtime),
@@ -2431,10 +2367,10 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             try:
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n🛑 *PREDICTION ENGINE OFFLINE*\n{DIVIDER}\n\n"
-                    f"❌ Status: *STOPPED*\n{SUB_DIVIDER}\n"
+                    f"{DIVIDER}\n🛑 <b>PREDICTION ENGINE OFFLINE</b>\n{DIVIDER}\n\n"
+                    f"❌ Status: <b>STOPPED</b>\n{SUB_DIVIDER}\n"
                     f"Press 🎯 START to resume anytime.\n\n{styled_footer()}",
-                    reply_markup=create_menu(), parse_mode="Markdown")
+                    reply_markup=create_menu(), parse_mode="HTML")
             except Exception:
                 pass
             runtime["stop"] = False
@@ -2444,10 +2380,10 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             try:
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n📢 *CHANNEL LINKING*\n{DIVIDER}\n\n"
-                    f"⚡ Send your *channel username*\nExample: `@yourchannel`\n\n"
-                    f"🛡 _Bot must be admin in the channel._\n\n{styled_footer()}",
-                    parse_mode="Markdown")
+                    f"{DIVIDER}\n📢 <b>CHANNEL LINKING</b>\n{DIVIDER}\n\n"
+                    f"⚡ Send your <b>channel username</b>\nExample: <code>@yourchannel</code>\n\n"
+                    f"🛡 <i>Bot must be admin in the channel.</i>\n\n{styled_footer()}",
+                    parse_mode="HTML")
             except Exception:
                 pass
 
@@ -2457,13 +2393,13 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 total, d1, d2, top = get_hosted_stats_sync(user_file)
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n📊 *LIVE BOT STATISTICS*\n{DIVIDER}\n\n"
-                    f"👥 Total Users     : *{total}*\n"
-                    f"📅 Active Today    : *{d1}*\n"
-                    f"📅 Active Yesterday: *{d2}*\n\n"
-                    f"{SUB_DIVIDER}\n🏆 *TOP 5 PERFORMERS*\n{SUB_DIVIDER}\n"
+                    f"{DIVIDER}\n📊 <b>LIVE BOT STATISTICS</b>\n{DIVIDER}\n\n"
+                    f"👥 Total Users     : <b>{total}</b>\n"
+                    f"📅 Active Today    : <b>{d1}</b>\n"
+                    f"📅 Active Yesterday: <b>{d2}</b>\n\n"
+                    f"{SUB_DIVIDER}\n🏆 <b>TOP 5 PERFORMERS</b>\n{SUB_DIVIDER}\n"
                     f"{top}\n\n{styled_footer()}",
-                    reply_markup=create_menu(), parse_mode="Markdown")
+                    reply_markup=create_menu(), parse_mode="HTML")
             except Exception:
                 pass
 
@@ -2476,11 +2412,11 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             try:
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n👑 *MEET THE DEVELOPER* 👑\n{DIVIDER}\n\n"
-                    f"👤 *Name:* KOHLI\n💎 *Role:* Premium Bot Developer\n"
-                    f"⚡ *Specialty:* AI Prediction Systems\n\n"
+                    f"{DIVIDER}\n👑 <b>MEET THE DEVELOPER</b> 👑\n{DIVIDER}\n\n"
+                    f"👤 <b>Name:</b> KOHLI\n💎 <b>Role:</b> Premium Bot Developer\n"
+                    f"⚡ <b>Specialty:</b> AI Prediction Systems\n\n"
                     f"{SUB_DIVIDER}\n💬 Need a custom bot? Reach out below!\n\n{styled_footer()}",
-                    reply_markup=markup, parse_mode="Markdown")
+                    reply_markup=markup, parse_mode="HTML")
             except Exception:
                 pass
 
@@ -2488,8 +2424,8 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             try:
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n💎 *PREMIUM FEATURES* 💎\n{DIVIDER}\n\n"
-                    f"🔥 *What you get:*\n\n"
+                    f"{DIVIDER}\n💎 <b>PREMIUM FEATURES</b> 💎\n{DIVIDER}\n\n"
+                    f"🔥 <b>What you get:</b>\n\n"
                     f"  ⚡ 99% AI Accuracy Engine\n"
                     f"  ⚡ Unlimited Predictions\n"
                     f"  ⚡ Auto Channel Broadcasting\n"
@@ -2497,7 +2433,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                     f"  ⚡ 24/7 Uptime Guarantee\n"
                     f"  ⚡ Priority Support\n\n"
                     f"{SUB_DIVIDER}\n👑 Contact @xxLEGEND_KOHLI for Premium\n\n{styled_footer()}",
-                    reply_markup=create_menu(), parse_mode="Markdown")
+                    reply_markup=create_menu(), parse_mode="HTML")
             except Exception:
                 pass
 
@@ -2510,24 +2446,19 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 hosted_state["waiting_channel"] = False
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n✅ *CHANNEL LINKED SUCCESSFULLY*\n{DIVIDER}\n\n"
-                    f"📢 Channel: `{channel_input}`\n{SUB_DIVIDER}\n"
+                    f"{DIVIDER}\n✅ <b>CHANNEL LINKED SUCCESSFULLY</b>\n{DIVIDER}\n\n"
+                    f"📢 Channel: <code>{channel_input}</code>\n{SUB_DIVIDER}\n"
                     f"🚀 Predictions will now auto-post there!\n\n{styled_footer()}",
-                    parse_mode="Markdown", reply_markup=create_menu())
+                    parse_mode="HTML", reply_markup=create_menu())
             except Exception as e:
                 hosted.send_message(
                     cid,
-                    f"{DIVIDER}\n❌ *LINKING FAILED*\n{DIVIDER}\n\n"
-                    f"Error: `{e}`\n\n🛡 Make sure bot is *admin* in the channel.\n\n{styled_footer()}",
-                    reply_markup=create_menu())
+                    f"{DIVIDER}\n❌ <b>LINKING FAILED</b>\n{DIVIDER}\n\n"
+                    f"Error: <code>{e}</code>\n\n🛡 Make sure bot is <b>admin</b> in the channel.\n\n{styled_footer()}",
+                    reply_markup=create_menu(), parse_mode="HTML")
                 hosted_state["waiting_channel"] = False
 
-    # ---------- HOSTED BOT: prediction cycle (sync) ----------
     def run_hosted_prediction_cycle_sync(bot_obj, chat_id, channel_id, runtime_ref):
-        """
-        Runs the prediction loop synchronously using an isolated asyncio loop.
-        Reuses the SAME smart_predict + prediction message format as v4.1.
-        """
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -2541,11 +2472,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 pass
 
     async def _async_prediction_cycle(bot_obj, chat_id, channel_id, runtime_ref):
-        """
-        Async inner-loop that mirrors v4.1 prediction_loop but uses a per-bot
-        sync TeleBot for outbound messages and shared helpers for prediction.
-        """
-        async def send_sync(target, text, parse_mode="Markdown"):
+        async def send_sync(target, text, parse_mode="HTML"):
             try:
                 bot_obj.send_message(target, text, parse_mode=parse_mode)
             except Exception:
@@ -2562,22 +2489,20 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             await send_sticker_sync(chat_id, STICKER_START)
             await asyncio.sleep(1)
             await send_sync(chat_id,
-                f"{sep}\n🤖 𝐊ᴏʜʟɪ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ\n{sep}\n"
-                f"🖥 𝐒ᴇ r ᴠᴇ r : 🤖 𝐀ᴅᴀᴘᴛɪᴠᴇ 𝐐ᴜᴀɴᴛ\n"
-                f"🕐 𝐒ᴛᴀ r ᴛ : <code>{now_str()}</code>\n{sep}")
+                f"{sep}\n🤖 <b>KOHLI VIP PREDICTION</b>\n{sep}\n"
+                f"🖥 Server : 🤖 Adaptive Quant\n"
+                f"🕐 Start : <code>{now_str()}</code>\n{sep}")
 
             while not runtime_ref.get("stop"):
                 if runtime_ref.get("paused"):
                     await asyncio.sleep(2)
                     continue
 
-                # Fetch fresh history from v4.1 API
                 records = await fetch_history()
                 period = await next_period()
 
-                # Build minimal session for smart_predict
                 session = {
-                    "server": "2",  # Adaptive Quant
+                    "server": "2",
                     "current_level": 1,
                     "last_period": period,
                     "consecutive_losses": 0,
@@ -2592,7 +2517,6 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                 if channel_id:
                     await send_sync(channel_id, msg_text)
 
-                # Wait for result
                 result, num = await wait_for_result(period)
                 if result:
                     is_win = (result == prediction)
@@ -2602,11 +2526,10 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
                     else:
                         await send_sync(chat_id, f"❌ LOSS. Result: {result} ({num})")
 
-                # Wait until next period
                 await asyncio.sleep(5)
 
             await send_sticker_sync(chat_id, STICKER_STOP)
-            await send_sync(chat_id, f"{sep}\n🛑 𝐒ᴇssɪᴏɴ 𝐒ᴛᴏᴘᴘᴇᴅ\n{sep}")
+            await send_sync(chat_id, f"{sep}\n🛑 <b>Session Stopped</b>\n{sep}")
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -2643,7 +2566,7 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
     return entry
 
 
-# ---------- SYNC USER STATS HELPERS ----------
+# ---------- SYNC USER HELPERS ----------
 
 def load_users_sync(file_path):
     if not os.path.exists(file_path):
@@ -2672,10 +2595,8 @@ def get_hosted_stats_sync(file_path):
         try:
             last = datetime.strptime(u["last_seen"], "%Y-%m-%d")
             delta = (today - last).days
-            if delta == 0:
-                d1 += 1
-            elif delta == 1:
-                d2 += 1
+            if delta == 0: d1 += 1
+            elif delta == 1: d2 += 1
         except Exception:
             pass
     top_list = "\n".join(
@@ -2686,7 +2607,7 @@ def get_hosted_stats_sync(file_path):
 
 
 # ============================================================
-# 🌐 FLASK API (HOSTING)
+# 🌐 FLASK API
 # ============================================================
 
 api_app = Flask(__name__)
@@ -2697,7 +2618,7 @@ def home():
     return jsonify({
         "status": "online",
         "service": "KOHLI Premium Hosting + Prediction",
-        "version": "7.0",
+        "version": "7.1",
         "hosted_bots": sum(len(b) for b in hosted_bots.values()),
         "registry_count": len(hosted_registry),
         "pred_active_sessions": len(pred_active_sessions),
@@ -2987,7 +2908,7 @@ def api_bot_stats():
 
 
 # ============================================================
-# 🔄 RESTORE HOSTED BOTS FROM REGISTRY
+# 🔄 RESTORE
 # ============================================================
 
 def restore_bots_from_registry():
@@ -3009,8 +2930,43 @@ def restore_bots_from_registry():
 
 
 # ============================================================
-# 🚀 RUN
+# 🚀 TOKEN VALIDATION + RUN
 # ============================================================
+
+async def validate_tokens():
+    """Validate both bot tokens before starting."""
+    errors = []
+
+    try:
+        me = host_bot.get_me()
+        print(f"✅ HOST BOT OK: @{me.username} (ID: {me.id})")
+    except ApiTelegramException as e:
+        if e.error_code == 401:
+            errors.append(f"❌ HOST_BOT_TOKEN invalid (401 Unauthorized)")
+        else:
+            errors.append(f"⚠️ HOST_BOT_TOKEN error: {e}")
+    except Exception as e:
+        errors.append(f"⚠️ HOST_BOT_TOKEN error: {e}")
+
+    try:
+        me = await pred_bot.get_me()
+        print(f"✅ PRED BOT OK: @{me.username} (ID: {me.id})")
+    except ApiTelegramException as e:
+        if e.error_code == 401:
+            errors.append(f"❌ PRED_BOT_TOKEN invalid (401 Unauthorized)")
+        else:
+            errors.append(f"⚠️ PRED_BOT_TOKEN error: {e}")
+    except Exception as e:
+        errors.append(f"⚠️ PRED_BOT_TOKEN error: {e}")
+
+    if errors:
+        print("\n" + "!" * 60)
+        for err in errors:
+            print(err)
+        print("!" * 60 + "\n")
+
+    return len(errors) == 0
+
 
 def run_api():
     port = int(os.environ.get("PORT", 5000))
@@ -3018,10 +2974,19 @@ def run_api():
 
 
 async def run_prediction_bot():
-    """Start the standalone prediction bot (v4.1) with recovery."""
+    """Start the standalone prediction bot with 401 handling."""
     try:
         me = await pred_bot.get_me()
         print(f"✅ Prediction bot logged in as: @{me.username}")
+    except ApiTelegramException as e:
+        if e.error_code == 401:
+            print("\n" + "!" * 60)
+            print("❌ PREDICTION BOT TOKEN INVALID (401 Unauthorized)")
+            print("👉 Get new token from @BotFather and update PRED_BOT_TOKEN")
+            print("!" * 60 + "\n")
+            return
+        print(f"⚠️ Prediction bot error: {e}")
+        return
     except Exception as e:
         print(f"⚠️ Prediction bot not started: {e}")
         return
@@ -3037,6 +3002,11 @@ async def run_prediction_bot():
             allowed_updates=util.update_types,
             request_timeout=REQUEST_TIMEOUT,
         )
+    except ApiTelegramException as e:
+        if e.error_code == 401:
+            print("❌ Prediction bot token revoked during runtime.")
+            return
+        print(f"[PRED POLL] Error: {e}")
     except Exception as e:
         print(f"[PRED POLL] Error: {e}")
 
@@ -3044,36 +3014,56 @@ async def run_prediction_bot():
 async def main_async():
     print("""
 ╔══════════════════════════════════════════════════════════╗
-║   👑 KOHLI HOSTING + PREDICTION BOT v7.0 👑             ║
+║   👑 KOHLI HOSTING + PREDICTION BOT v7.1 👑             ║
 ║   🚀 Railway-Ready • Persistent • Multi-Bot             ║
 ╚══════════════════════════════════════════════════════════╝
 """)
 
-    # Start Flask API in background thread
+    # Validate tokens first
+    tokens_ok = await validate_tokens()
+    if not tokens_ok:
+        print("⚠️ Some tokens are invalid — continuing with valid ones only.\n")
+
+    # Start Flask API
     threading.Thread(target=run_api, daemon=True).start()
 
-    # Start restore of hosted bots (non-blocking)
+    # Restore hosted bots
     threading.Thread(target=restore_bots_from_registry, daemon=True).start()
 
-    # Start prediction bot in current async loop
+    # Start prediction bot
     await run_prediction_bot()
 
 
 def run_host_bot():
-    """Run host bot polling in its own thread."""
+    """Run host bot polling in its own thread with 401 handling."""
+    try:
+        me = host_bot.get_me()
+        print(f"✅ Host bot logged in as: @{me.username}")
+    except ApiTelegramException as e:
+        if e.error_code == 401:
+            print("\n" + "!" * 60)
+            print("❌ HOST BOT TOKEN INVALID (401 Unauthorized)")
+            print("👉 Get new token from @BotFather and update HOST_BOT_TOKEN")
+            print("!" * 60 + "\n")
+            return
+        print(f"⚠️ Host bot pre-check failed: {e}")
+
     while True:
         try:
             host_bot.infinity_polling(timeout=60, long_polling_timeout=60)
         except Exception as e:
+            if "401" in str(e):
+                print("❌ Host bot token revoked. Stopping.")
+                return
             print(f"[HOST BOT] Error: {e}")
             time.sleep(5)
 
 
 if __name__ == "__main__":
-    # Start host bot polling in background thread
+    # Start host bot in background thread
     threading.Thread(target=run_host_bot, daemon=True).start()
 
-    # Run prediction bot + Flask in the main asyncio loop
+    # Run prediction bot + Flask in main async loop
     try:
         asyncio.run(main_async())
     except KeyboardInterrupt:
