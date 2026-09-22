@@ -1,44 +1,101 @@
 # ============================================================
-# 👑 KOHLI VIP PREDICTION BOT — PROFESSIONAL v7.0
+# 👑 KOHLI VIP PREDICTION BOT — ALL-IN-ONE v8.0
 # ============================================================
-# ⚔️ Server 1: Dragon Track (HTML Engine)
-# 🤖 Server 2: Adaptive Quant Engine (Ensemble Analysis)
-# 🔑 Server 3: Seed Hash Decrypter (SHA256 Win Predictor)
-# ✨ Enhanced UI • Premium Animations • Railway Ready
+# ✨ Railway Ready — No Dockerfile, No nixpacks.toml needed
+# 🔧 Auto-installs dependencies at startup
 # ============================================================
+
+import subprocess
+import sys
+import os
+
+# ──────────────────────────────────────────────────────────────
+# AUTO-INSTALL DEPENDENCIES (Railway Safe)
+# ──────────────────────────────────────────────────────────────
+
+REQUIRED = [
+    "pyTelegramBotAPI",
+    "httpx",
+    "flask",
+    "pytz",
+]
+
+def _ensure_pip():
+    """Ensure pip is available; bootstrap via ensurepip if missing."""
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "--version"],
+            check=True, capture_output=True
+        )
+        return True
+    except Exception:
+        try:
+            subprocess.run(
+                [sys.executable, "-m", "ensurepip", "--upgrade"],
+                check=True, capture_output=True
+            )
+            return True
+        except Exception:
+            return False
+
+def _install(pkg):
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "pip", "install", "--no-cache-dir", "--quiet", pkg],
+            check=True, capture_output=True
+        )
+        return True
+    except Exception as e:
+        print(f"[AUTO-INSTALL] Failed {pkg}: {e}")
+        return False
+
+def _bootstrap():
+    print("[BOOTSTRAP] Checking dependencies...")
+    if not _ensure_pip():
+        print("[BOOTSTRAP] pip bootstrap failed. Trying anyway...")
+    for pkg in REQUIRED:
+        _install(pkg)
+    print("[BOOTSTRAP] Dependencies ready.")
+
+_bootstrap()
+
+# ──────────────────────────────────────────────────────────────
+# NOW SAFE TO IMPORT
+# ──────────────────────────────────────────────────────────────
 
 import asyncio
 import json
 import random
-import os
 import math
 import hashlib
 import threading
 import time
-import pytz
 from datetime import datetime
 from collections import deque, Counter
 import httpx
 from telebot.async_telebot import AsyncTeleBot
 from telebot import types, util
 from telebot.apihelper import ApiTelegramException
+import telebot as sync_telebot
 from flask import Flask, request, jsonify
+import pytz
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # CONFIGURATION
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "8766089087:AAFQ4hk4V27YtzWvzCSmWMRCJFZF_NWV8lg")
+HOST_BOT_TOKEN = os.environ.get("HOST_BOT_TOKEN", "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o")
 ADMIN_ID = int(os.environ.get("ADMIN_ID", "7741897793"))
 FIREBASE_URL = os.environ.get("FIREBASE_URL", "https://glowbet-1b2ce-default-rtdb.firebaseio.com")
 HISTORY_API = "https://draw.ar-lottery01.com/WinGo/WinGo_1M/GetHistoryIssuePage.json"
+
 DATA_DIR = os.environ.get("DATA_DIR", "kohli_data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DATA_FILE = os.path.join(DATA_DIR, "bot_data.json")
 
-# NETWORK FIXES
 REQUEST_TIMEOUT = 60
-MAX_RETRIES = 10
+MAX_RETRIES = 5
 RETRY_DELAY = 3
 
 STICKER_START = "CAACAgUAAxkBAAFLuItqJPtZCBFQfGfRsJKl6boNvqKixQACuRMAAtgMEVayBm8tXDvNpDsE"
@@ -48,26 +105,44 @@ STICKER_WIN_LIST = [
 ]
 STICKER_STOP = "CAACAgUAAxkBAAFLuJFqJPuZKYQt4bz30u_39DM-JwW4agAClBEAAo-CGFb2yvdmMKOx1jsE"
 
+DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━"
+SUB_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
+SPARKLE = "✨"
+CROWN = "👑"
+ROCKET = "🚀"
+FIRE = "🔥"
+GEM = "💎"
+LIGHTNING = "⚡"
+TARGET = "🎯"
+CHART = "📊"
+BELL = "🔔"
+SHIELD = "🛡️"
+BRAIN = "🧠"
+
+# ──────────────────────────────────────────────────────────────
+# GLOBAL INSTANCES
+# ──────────────────────────────────────────────────────────────
+
 bot = AsyncTeleBot(BOT_TOKEN)
 bot.request_timeout = REQUEST_TIMEOUT
 
+host_bot = sync_telebot.TeleBot(HOST_BOT_TOKEN, parse_mode="Markdown")
+
 user_states = {}
 active_sessions = {}
-
-# ──────────────────────────────────────────────────────────────────────────────
-# HTTP CLIENT WITH PROXY SUPPORT
-# ──────────────────────────────────────────────────────────────────────────────
-
 _http_client = None
+
+# ──────────────────────────────────────────────────────────────
+# HTTP CLIENT
+# ──────────────────────────────────────────────────────────────
 
 def get_http():
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        client_kwargs = {
-            "timeout": httpx.Timeout(REQUEST_TIMEOUT, connect=15.0),
-            "limits": httpx.Limits(max_connections=20, max_keepalive_connections=10)
-        }
-        _http_client = httpx.AsyncClient(**client_kwargs)
+        _http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=15.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
     return _http_client
 
 async def close_http():
@@ -76,9 +151,9 @@ async def close_http():
         await _http_client.aclose()
     _http_client = None
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # CORE UTILITIES
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 def encode_cid(channel_id: str) -> str:
     cid = str(channel_id).replace("-100", "").lstrip("-")
@@ -100,22 +175,26 @@ def _confidence_bar(pct):
     filled = round(pct / 10)
     return "█" * filled + "░" * (10 - filled)
 
+def styled_footer(text="KOHLI PREMIUM ENGINE"):
+    return f"{SUB_DIVIDER}\n{LIGHTNING} {text} {LIGHTNING}"
+
 def generate_seed_hash_analysis(period: str):
     salt = "GLOWBET_SECURE_WIN_SEED_KEY_2026"
     combined = f"{period}_{salt}"
     hash_hex = hashlib.sha256(combined.encode('utf-8')).hexdigest()
-    
+
     hash_segment = hash_hex[:8]
     number = int(hash_segment, 16) % 10
     prediction = "BIG" if number >= 5 else "SMALL"
     is_jackpot = (number in [0, 5])
-    
+
     numeric_count = sum(1 for c in hash_hex if c.isdigit())
     confidence = 80 + (numeric_count % 16)
-    
+
     return prediction, number, is_jackpot, hash_hex, confidence
 
-def make_prediction_text(period, prediction, level, server, confidence=None, signal_strength=None, jackpot=False, hash_val=None):
+def make_prediction_text(period, prediction, level, server, confidence=None,
+                         signal_strength=None, jackpot=False, hash_val=None):
     if prediction == "SMALL":
         bet_line = "😈𝐁ᴇᴛ ➪ 🔵𝐒ᴍᴀʟʟ ☠️"
     else:
@@ -167,13 +246,13 @@ def build_session_summary(session, reason):
     started = session.get('started_at', '—')
     ended_at = now_str()
     max_streak = session.get('max_win_streak', 0)
-    
+
     if server == "1":
-        server_name = "⚔️ 𝐋ᴀsᴇ r 𝐓ʀᴀᴄᴋ"
+        server_name = "⚔️ 𝐃 r ᴀɢᴏɴ 𝐓 r ᴀᴄᴋ"
     elif server == "2":
-        server_name = "🤖 𝐀𝐏𝐈 𝐑ᴇᴀᴅᴇʀ"
+        server_name = "🤖 𝐀ᴅᴀᴘᴛɪᴠᴇ 𝐐ᴜᴀɴᴛ"
     else:
-        server_name = "🔑 𝐒ᴇᴇᴅ 𝐃ᴇᴄʀʏᴘᴛᴏʀ"
+        server_name = "🔑 𝐒ᴇᴇᴅ 𝐇ᴀsʜ 𝐃ᴇᴄʀʏᴘᴛᴏʀ"
 
     if recent:
         recent_visual = "".join("✅" if r == 1 else "❌" for r in recent[-10:])
@@ -190,9 +269,9 @@ def build_session_summary(session, reason):
         status_line = f"⚠️ {reason}"
 
     sep = "━━━━━━━━━━━━━━━━━━━━━━━━"
-    summary = (
+    return (
         f"{sep}\n"
-        f"☑️ 𝐍ᴀɪᴛɪᴋ 𝐏ʀɪᴠᴀᴛᴇ 𝐀ᴜᴛᴏ 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ ⚠️\n"
+        f"☑️ 𝐊ᴏʜʟɪ 𝐏ʀɪᴠᴀᴛᴇ 𝐀ᴜᴛᴏ 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ ⚠️\n"
         f"{sep}\n\n"
         f"🖥 𝐒ᴇ r ᴠᴇ r : {server_name}\n"
         f"🕐 𝐒ᴛᴀ r ᴛ : <code>{started}</code>\n"
@@ -206,13 +285,12 @@ def build_session_summary(session, reason):
         f"{recent_visual} {recent_rate}%\n\n"
         f"📌 𝐒ᴛᴀᴛᴜs » {status_line}\n\n"
         f"{sep}\n"
-        f"🚀 𝐀𝐈 𝐏ᴏᴡᴇʀᴇᴅ 𝐁ʏ @OFFICIALNAITIK2"
+        f"🚀 𝐀𝐈 𝐏ᴏᴡᴇʀᴇᴅ 𝐁ʏ @xxLEGEND_KOHLI"
     )
-    return summary
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # PERSISTENCE
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 _data_cache = None
 
@@ -221,6 +299,7 @@ async def load_data():
     if _data_cache is not None:
         return _data_cache
     empty = {"users": {}, "sessions": {}}
+
     if FIREBASE_URL:
         for attempt in range(MAX_RETRIES):
             try:
@@ -235,6 +314,7 @@ async def load_data():
             except Exception:
                 if attempt < MAX_RETRIES - 1:
                     await asyncio.sleep(RETRY_DELAY)
+
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
@@ -246,6 +326,7 @@ async def load_data():
                     return _data_cache
     except Exception:
         pass
+
     _data_cache = empty
     return _data_cache
 
@@ -266,7 +347,8 @@ async def save_data(data):
 async def add_channel(user_id, channel_link, channel_id, auto_detected=False):
     data = await load_data()
     uid = str(user_id)
-    data['users'].setdefault(uid, {'channels': [], 'settings': {}, 'total_wins': 0, 'total_losses': 0})
+    data['users'].setdefault(uid, {'channels': [], 'settings': {},
+                                   'total_wins': 0, 'total_losses': 0})
     for ch in data['users'][uid]['channels']:
         if str(ch['channel_id']) == str(channel_id):
             return False
@@ -325,9 +407,9 @@ async def get_all_users():
     data = await load_data()
     return data.get('users', {})
 
-# ──────────────────────────────────────────────────────────────────────────────
-# HISTORY DATA PARSER
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
+# HISTORY DATA
+# ──────────────────────────────────────────────────────────────
 
 async def fetch_history():
     for attempt in range(MAX_RETRIES):
@@ -337,7 +419,7 @@ async def fetch_history():
             if r.status_code == 200:
                 j = r.json()
                 records = (j.get('data', {}).get('list', []) or
-                          j.get('data', []) or j.get('list', []) or [])
+                           j.get('data', []) or j.get('list', []) or [])
                 if records:
                     return records
         except Exception:
@@ -383,9 +465,9 @@ async def wait_for_result(period_str):
         await asyncio.sleep(3)
     return None, None
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # KEYBOARDS & SAFE SEND
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 def user_kb():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
@@ -408,7 +490,8 @@ async def safe_send(target, text, reply_markup=None):
     for attempt in range(MAX_RETRIES):
         try:
             await asyncio.sleep(0.3)
-            return await bot.send_message(target, text, parse_mode="HTML", reply_markup=reply_markup)
+            return await bot.send_message(target, text, parse_mode="HTML",
+                                          reply_markup=reply_markup)
         except ApiTelegramException as e:
             if e.error_code == 429:
                 retry_after = e.result.get('parameters', {}).get('retry_after', 5)
@@ -441,9 +524,9 @@ async def send_win_sticker(target):
     sticker = random.choice(STICKER_WIN_LIST)
     await send_sticker(target, sticker)
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # PREDICTION ALGORITHMS
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 def extract_outcomes(records, n=300):
     outcomes = []
@@ -740,7 +823,6 @@ def _quant_core_predict(outcomes: list):
 
     board = _SignalBoard()
 
-    # HTML Dragon Line
     def _html_dragon_line(hist):
         if len(hist) < 2:
             return None
@@ -1256,11 +1338,11 @@ def server2_ultra_predict(outcomes: list, level: int, session: dict):
 def adaptive_engine_predict(outcomes: list, raw_nums: list, session: dict):
     consec_losses = session.get('consecutive_losses', 0)
     recent_res = session.get('recent_results', [])
-    
+
     recent_win_rate = 1.0
     if recent_res:
         recent_win_rate = sum(recent_res[-5:]) / len(recent_res[-5:])
-        
+
     last_p = session.get('last_period', '0')
     try:
         next_p = str(int(last_p) + 1)
@@ -1270,17 +1352,15 @@ def adaptive_engine_predict(outcomes: list, raw_nums: list, session: dict):
     if consec_losses >= 1:
         pred, num, jackpot, h_hex, conf = generate_seed_hash_analysis(next_p)
         return pred, conf, "ADAPTIVE-RECOVERY", jackpot, h_hex
-        
+
     if recent_win_rate < 0.40:
         pred, conf, sig, meta = _quant_core_predict(outcomes)
         flipped_pred = "SMALL" if pred == "BIG" else "BIG"
-        
         is_jackpot = False
         if len(raw_nums) >= 2:
             is_jackpot = (raw_nums[0] in [0, 5, 1, 9])
-            
         return flipped_pred, max(55, conf - 5), "ADAPTIVE-COUNTER_TREND", is_jackpot, None
-        
+
     pred, conf, sig, meta = _quant_core_predict(outcomes)
     is_jackpot = (meta.get('streak', ('BIG', 0))[1] >= 4)
     return pred, conf, f"ADAPTIVE-OPTIMAL ({sig})", is_jackpot, None
@@ -1315,9 +1395,9 @@ async def smart_predict(records, session):
     pred, conf, sig, jackpot, h_hex = adaptive_engine_predict(outcomes, raw_nums, session)
     return pred, conf, sig, jackpot, h_hex
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # PREDICTION LOOP
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 async def prediction_loop(user_id, channel_link, server):
     session = active_sessions.get(user_id)
@@ -1325,14 +1405,14 @@ async def prediction_loop(user_id, channel_link, server):
         return
 
     channel = int(session['channel_id'])
-    
+
     if server == "1":
         server_name = "⚔️ 𝐃 r ᴀɢᴏɴ 𝐓 r ᴀᴄᴋ"
     elif server == "2":
         server_name = "🤖 𝐀ᴅᴀᴘᴛɪᴠᴇ 𝐐ᴜᴀɴᴛ"
     else:
-        server_name = "🔑 𝐒ᴇᴇᴅ 𝐇ᴀsʜ 𝐃ᴇᴄʀʏᴘᴛᴏ𝐫"
-        
+        server_name = "🔑 𝐒ᴇᴇᴅ 𝐇ᴀsʜ 𝐃ᴇᴄʀʏᴘᴛᴏʀ"
+
     sep = "━━━━━━━━━━━━━━━━━━━━━━━━"
 
     try:
@@ -1365,7 +1445,7 @@ async def prediction_loop(user_id, channel_link, server):
             current_level = session.get('current_level', 1)
             bet_num += 1
             session['current_bet'] = bet_num
-            
+
             records = await fetch_history()
             period = await next_period()
             session['last_period'] = period
@@ -1374,7 +1454,8 @@ async def prediction_loop(user_id, channel_link, server):
             prediction, confidence, signal_strength, jackpot_detected, hash_val = await smart_predict(records, session)
 
             sent = await safe_send(channel, make_prediction_text(
-                period, prediction, current_level, server, confidence, signal_strength, jackpot_detected, hash_val))
+                period, prediction, current_level, server, confidence,
+                signal_strength, jackpot_detected, hash_val))
             if sent is None:
                 await end_session(user_id, channel, "⚠️ Posting permission lost.")
                 return
@@ -1516,9 +1597,9 @@ async def recover_sessions():
     except Exception:
         pass
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # AUTO DETECTION
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 @bot.my_chat_member_handler()
 async def on_my_chat_member_update(update: types.ChatMemberUpdated):
@@ -1538,7 +1619,8 @@ async def on_my_chat_member_update(update: types.ChatMemberUpdated):
     if added:
         try:
             kb = types.InlineKeyboardMarkup()
-            kb.row(types.InlineKeyboardButton("🚀 𝐒ᴛᴀ r ᴛ 𝐏 r ᴇᴅɪᴄᴛɪᴏɴ 𝐍ᴏᴡ!", callback_data=f"quickstart_{channel_id}"))
+            kb.row(types.InlineKeyboardButton("🚀 𝐒ᴛᴀ r ᴛ 𝐏 r ᴇᴅɪᴄᴛɪᴏɴ 𝐍ᴏᴡ!",
+                                              callback_data=f"quickstart_{channel_id}"))
             await bot.send_message(promoted_by,
                 f"✅ 𝐂ʜᴀɴɴᴇʟ 𝐀ᴜᴛᴏ-𝐃ᴇᴛᴇᴄᴛᴇᴅ & 𝐀ᴅᴅᴇᴅ!\n\n{'━'*22}\n"
                 f"📢 𝐂ʜᴀɴɴᴇʟ : {channel_title}\n"
@@ -1563,8 +1645,8 @@ HELP_TEXT = (
     "📢 𝐀ᴜᴛᴏ 𝐂ʜᴀɴɴᴇʟ 𝐒ᴇᴛᴜᴘ:\nBot ko channel ka Admin banayein → Auto detect!\n\n"
     "⚖️ 𝐌ᴀ r ᴛɪɴɢᴀʟᴇ 𝐋ᴇᴠᴇʟs:\n"
     "• Capped at level 2 max across all modules\n\n"
-    "📊 𝐄𝐧𝐠ɪɴᴇs:\n"
-    "• ⚔️ 𝐒ᴇ r ᴠᴇ r 1 — Dhruv HTML Engine (Dragon+Chop+Density)\n"
+    "📊 𝐄𝐧ɢɪɴᴇs:\n"
+    "• ⚔️ 𝐒ᴇ r ᴠᴇ r 1 — Dragon HTML Engine (Dragon+Chop+Density)\n"
     "• 🤖 𝐒ᴇ r ᴠᴇ r 2 — Adaptive Quant Engine (Ensemble Analysis)\n"
     "• 🔑 𝐒ᴇ r ᴠᴇ r 3 — Seed Hash Decrypter (Mathematical Hashing)\n\n"
     "📞 𝐒ᴜᴘᴘᴏ r ᴛ: @xxLEGEND_KOHLI"
@@ -1581,7 +1663,8 @@ async def trigger_start(message, user_id):
                 "❌ 𝐍ᴏ 𝐂ʜᴀɴɴᴇʟs 𝐀ᴅᴅᴇᴅ!\n\nBot ko channel Admin banayein ya <code>/add @ChannelUsername</code> karein.")
             return
         if user_id in active_sessions:
-            await safe_edit(loading_msg, "⚠️ 𝐒ᴇssɪᴏɴ 𝐀ʟ r ᴇᴀᴅʏ 𝐑ᴜɴɴɪɴɢ!\nPehle '🛑 Stop Prediction' karein.")
+            await safe_edit(loading_msg,
+                "⚠️ 𝐒ᴇssɪᴏɴ 𝐀ʟ r ᴇᴀᴅʏ 𝐑ᴜɴɴɪɴɢ!\nPehle '🛑 Stop Prediction' karein.")
             return
 
         user_states[user_id] = {"step": "select_server", "channels": channels}
@@ -1600,9 +1683,9 @@ async def trigger_start(message, user_id):
     except Exception as e:
         await safe_edit(loading_msg, f"❌ 𝐄ʀʀᴏ r: <code>{str(e)[:150]}</code>")
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # COMMANDS
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 @bot.message_handler(commands=['start'])
 async def cmd_start(message: types.Message):
@@ -1610,7 +1693,7 @@ async def cmd_start(message: types.Message):
     kb = admin_kb() if user_id == ADMIN_ID else user_kb()
     await bot.send_message(message.chat.id,
         f"🎯 𝐖ᴇʟᴄᴏᴍᴇ, {message.from_user.first_name}!\n\n{'━'*22}\n"
-        f"🤖 𝐊ᴏʜʟɪ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ 𝐁ᴏᴛ v7.0\n"
+        f"🤖 𝐊ᴏʜʟɪ 𝐕𝐈𝐏 𝐏ʀᴇᴅɪᴄᴛɪᴏɴ 𝐁ᴏᴛ v8.0\n"
         f"⚔️ 𝐒ᴇ r ᴠᴇ r 1: Dragon HTML Engine\n"
         f"🤖 𝐒ᴇ r ᴠᴇ r 2: Adaptive Quant Engine\n"
         f"🔑 𝐒ᴇ r ᴠᴇ r 3: Seed Hash Decrypter\n{'━'*22}\n\n𝐔sᴇ ᴏᴘᴛɪᴏɴs ʙᴇʟᴏᴡ:",
@@ -1634,7 +1717,9 @@ async def cmd_add(message: types.Message):
     user_id = message.from_user.id
     args = message.text.split()
     if len(args) < 2:
-        await bot.send_message(message.chat.id, "❌ 𝐔sᴀɢᴇ: /add @YourChannel or /add -100xxxxxxxxxx", parse_mode="HTML")
+        await bot.send_message(message.chat.id,
+            "❌ 𝐔sᴀɢᴇ: /add @YourChannel or /add -100xxxxxxxxxx",
+            parse_mode="HTML")
         return
     channel_input = args[1].strip()
     status_msg = await bot.send_message(message.chat.id, "🔄 𝐕ᴇ r ɪꜰɪᴇ s...", parse_mode="HTML")
@@ -1649,9 +1734,11 @@ async def cmd_add(message: types.Message):
             return
         added = await add_channel(user_id, channel_uname, channel_id, auto_detected=False)
         if added:
-            await safe_edit(status_msg, f"✅ 𝐂ʜᴀɴɴᴇʟ 𝐀ᴅᴅᴇᴅ: {channel_title}\n\n'🚀 Start Prediction' se shuru karein.")
+            await safe_edit(status_msg,
+                f"✅ 𝐂ʜᴀɴɴᴇʟ 𝐀ᴅᴅᴇᴅ: {channel_title}\n\n'🚀 Start Prediction' se shuru karein.")
         else:
-            await safe_edit(status_msg, f"ℹ️ <b>{channel_title}</b> pehle se list mein hai!")
+            await safe_edit(status_msg,
+                f"ℹ️ <b>{channel_title}</b> pehle se list mein hai!")
     except Exception as e:
         await safe_edit(status_msg, f"❌ 𝐅ᴀɪʟᴇᴅ: <code>{str(e)}</code>")
 
@@ -1666,13 +1753,12 @@ async def cmd_reset_db(message: types.Message):
     _data_cache = empty_data
     await bot.send_message(message.chat.id, "✅ 𝐃ᴀᴛᴀʙᴀsᴇ 𝐖ɪᴘᴇᴅ!", parse_mode="HTML")
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # BROADCAST
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 async def run_broadcast(sender_id: int, text: str):
     all_users = await get_all_users()
-
     user_dm_ids = set()
     channel_ids_map = {}
 
@@ -1687,8 +1773,6 @@ async def run_broadcast(sender_id: int, text: str):
                 channel_ids_map[str(cid)] = ch.get('channel_link', str(cid))
 
     ok_dm = fail_dm = ok_ch = fail_ch = 0
-    failed_dms = []
-    failed_channels = []
 
     for uid in user_dm_ids:
         success = False
@@ -1712,7 +1796,6 @@ async def run_broadcast(sender_id: int, text: str):
             ok_dm += 1
         else:
             fail_dm += 1
-            failed_dms.append(uid)
 
     for cid_str, clink in channel_ids_map.items():
         try:
@@ -1741,39 +1824,17 @@ async def run_broadcast(sender_id: int, text: str):
             ok_ch += 1
         else:
             fail_ch += 1
-            failed_channels.append(clink)
-
-    for uid in failed_dms:
-        try:
-            await asyncio.sleep(1)
-            await bot.send_message(uid, text, parse_mode="HTML")
-            fail_dm -= 1
-            ok_dm += 1
-        except Exception:
-            pass
-
-    for clink in failed_channels:
-        for cid_str, cl in channel_ids_map.items():
-            if cl == clink:
-                try:
-                    await asyncio.sleep(1)
-                    await bot.send_message(int(cid_str), text, parse_mode="HTML")
-                    ok_ch += 1
-                    fail_ch -= 1
-                except Exception:
-                    pass
-                break
 
     return ok_dm, fail_dm, ok_ch, fail_ch
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # TEXT HANDLER
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 @bot.message_handler(func=lambda msg: True)
 async def on_text(message: types.Message):
     user_id = message.from_user.id
-    text = message.text.strip()
+    text = message.text.strip() if message.text else ""
     state = user_states.get(user_id)
 
     if text.startswith("/"):
@@ -1814,7 +1875,7 @@ async def on_text(message: types.Message):
             l = ch.get('total_losses', 0)
             rate = f"{round(w / (w + l) * 100)}%" if (w + l) > 0 else "N/A"
             resp += (f"<b>{i}. {ch['channel_link']}</b>\n🆔 <code>{ch['channel_id']}</code>\n"
-                    f"🎮 𝐒ᴇssɪᴏɴs: {s} | ✅ {w} | ❌ {l} | 📈 {rate}\n{'━'*22}\n\n")
+                     f"🎮 𝐒ᴇssɪᴏɴs: {s} | ✅ {w} | ❌ {l} | 📈 {rate}\n{'━'*22}\n\n")
         await bot.send_message(message.chat.id, resp, parse_mode="HTML")
         return
 
@@ -1901,8 +1962,7 @@ async def on_text(message: types.Message):
         total_ch = len(unique_channels)
         status_msg = await bot.send_message(
             message.chat.id,
-            f"📢 Broadcasting to {total_users} users + {total_ch} channels/groups...\n"
-            f"⏳ Please wait..."
+            f"📢 Broadcasting to {total_users} users + {total_ch} channels/groups...\n⏳ Please wait..."
         )
         ok_dm, fail_dm, ok_ch, fail_ch = await run_broadcast(user_id, text)
         await safe_edit(status_msg,
@@ -1921,14 +1981,13 @@ async def on_text(message: types.Message):
         server = state["server"]
         channel_link = state["channel_link"]
         channel_id = state["channel_id"]
-        max_level = 2
         user_states.pop(user_id, None)
         if user_id in active_sessions:
             await bot.send_message(message.chat.id, "⚠️ Session already running.")
             return
         active_sessions[user_id] = {
             'channel_link': channel_link, 'channel_id': channel_id,
-            'server': server, 'max_bets': bets, 'max_level': max_level,
+            'server': server, 'max_bets': bets, 'max_level': 2,
             'current_bet': 0, 'current_level': 1,
             'consecutive_losses': 0, 'consecutive_wins': 0,
             'win_streak': 0, 'max_win_streak': 0, 'max_loss_streak': 0,
@@ -1938,7 +1997,7 @@ async def on_text(message: types.Message):
             '_ending': False,
         }
         await save_session_db(user_id, active_sessions[user_id])
-        
+
         if server == "1":
             server_name = "⚔️ 𝐃 r ᴀɢᴏɴ 𝐓 r ᴀᴄᴋ"
         elif server == "2":
@@ -1955,9 +2014,9 @@ async def on_text(message: types.Message):
         task = asyncio.create_task(prediction_loop(user_id, channel_link, server))
         active_sessions[user_id]['task'] = task
 
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # CALLBACKS
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 @bot.callback_query_handler(func=lambda call: True)
 async def on_callback(cq: types.CallbackQuery):
@@ -2049,9 +2108,10 @@ async def on_callback(cq: types.CallbackQuery):
             kb = types.InlineKeyboardMarkup()
             for ch in channels:
                 cid = encode_cid(ch['channel_id'])
-                kb.row(types.InlineKeyboardButton(f"📢 {ch['channel_link']}", callback_data=f"ch_{server}_{cid}"))
+                kb.row(types.InlineKeyboardButton(f"📢 {ch['channel_link']}",
+                                                  callback_data=f"ch_{server}_{cid}"))
             kb.row(types.InlineKeyboardButton("❌ Cancel", callback_data="cancel"))
-            
+
             if server == "1":
                 sname = "⚔️ 𝐃 r ᴀɢᴏɴ 𝐓 r ᴀᴄᴋ"
             elif server == "2":
@@ -2072,7 +2132,8 @@ async def on_callback(cq: types.CallbackQuery):
             channel_id = decode_cid(encoded_cid)
             state = user_states.get(user_id, {})
             channels = state.get("channels", [])
-            channel_link = next((c['channel_link'] for c in channels if str(c['channel_id']) == str(channel_id)), None)
+            channel_link = next((c['channel_link'] for c in channels
+                                 if str(c['channel_id']) == str(channel_id)), None)
             if not channel_link:
                 await safe_edit(cq.message, "❌ Channel missing. Please restart.")
                 return
@@ -2080,7 +2141,7 @@ async def on_callback(cq: types.CallbackQuery):
                 "step": "select_bets", "server": server,
                 "channel_link": channel_link, "channel_id": str(channel_id)
             }
-            
+
             if server == "1":
                 sname = "⚔️ 𝐃 r ᴀɢᴏɴ 𝐓 r ᴀᴄᴋ"
             elif server == "2":
@@ -2101,25 +2162,14 @@ async def on_callback(cq: types.CallbackQuery):
         except Exception:
             pass
 
-# ──────────────────────────────────────────────────────────────────────────────
-# HOSTING BOT (TELEBOT SYNC — RAILWAY READY)
-# ──────────────────────────────────────────────────────────────────────────────
-
-import telebot as sync_telebot
-
-HOST_BOT_TOKEN = os.environ.get("HOST_BOT_TOKEN", "8372270378:AAEXNRXUD2xTwShxB7z7WR5uqX2NrWBvN6o")
-host_bot = sync_telebot.TeleBot(HOST_BOT_TOKEN, parse_mode="Markdown")
-
-DATA_DIR_HOST = os.environ.get("DATA_DIR", "kohli_data")
-os.makedirs(DATA_DIR_HOST, exist_ok=True)
-
-def data_path(filename):
-    return os.path.join(DATA_DIR_HOST, filename)
+# ──────────────────────────────────────────────────────────────
+# HOSTING BOT (SYNC) — FULL
+# ──────────────────────────────────────────────────────────────
 
 hosted_bots = {}
 hosted_by_id = {}
 hosted_registry = {}
-registry_file = data_path("hosted_registry.json")
+registry_file = os.path.join(DATA_DIR, "hosted_registry.json")
 
 def load_registry():
     global hosted_registry
@@ -2127,16 +2177,15 @@ def load_registry():
         try:
             with open(registry_file, "r") as f:
                 hosted_registry = json.load(f)
-        except Exception as e:
-            print(f"[REGISTRY] Load failed: {e}")
+        except Exception:
             hosted_registry = {}
 
 def save_registry():
     try:
         with open(registry_file, "w") as f:
             json.dump(hosted_registry, f, indent=2)
-    except Exception as e:
-        print(f"[REGISTRY] Save failed: {e}")
+    except Exception:
+        pass
 
 def register_bot(hosted_id, owner_id, username, bot_id, token):
     hosted_registry[hosted_id] = {
@@ -2204,6 +2253,59 @@ def get_stats(file_path):
     ) or "  No users yet."
     return len(users), day1, day2, top_list
 
+def generate_prediction_host():
+    num = random.randint(0, 9)
+    if num >= 5:
+        big_small = "🔴 BIG"
+        image = "https://i.postimg.cc/VL8z327L/IMG-20250908-115951-469.jpg"
+        trend = "📈 UPWARD TREND"
+    else:
+        big_small = "🔵 SMALL"
+        image = "https://i.postimg.cc/FzthF6Np/IMG-20250908-115954-296.jpg"
+        trend = "📉 DOWNWARD TREND"
+    return big_small, num, image, trend
+
+def generate_prediction_period():
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+    yyyyMMdd = now.strftime("%Y%m%d")
+    total_minutes = now.hour * 60 + now.minute
+    return f"{yyyyMMdd}1000{10001 + total_minutes}"
+
+def get_remaining_seconds_host():
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+    return 60 - now.second if now.second < 60 else 0
+
+def send_prediction_host(bot_obj, chat_id, period, big_small, num, image, trend):
+    ist = pytz.timezone("Asia/Kolkata")
+    now = datetime.now(ist)
+    timestamp = now.strftime("%d %b %Y • %I:%M:%S %p")
+    confidence = random.randint(88, 99)
+    filled = int(confidence / 10)
+    bar = "🟩" * filled + "⬜" * (10 - filled)
+
+    caption = (
+        f"{DIVIDER}\n"
+        f"{CROWN} *KOHLI AI PREDICTION* {CROWN}\n"
+        f"{DIVIDER}\n\n"
+        f"{TARGET} *Period:* `{period}`\n"
+        f"{BRAIN} *Signal:* {big_small} — `{num}`\n"
+        f"{CHART} *Trend:* {trend}\n"
+        f"{GEM} *Confidence:* `{confidence}%`\n"
+        f"`{bar}`\n\n"
+        f"{SUB_DIVIDER}\n"
+        f"⏱ *Next Cycle:* `1 Minute`\n"
+        f"🕒 *Issued:* `{timestamp}`\n"
+        f"{SUB_DIVIDER}\n\n"
+        f"{LIGHTNING} _Powered by KOHLI AI Engine_ {LIGHTNING}\n"
+        f"{DIVIDER}"
+    )
+    try:
+        bot_obj.send_photo(chat_id, image, caption=caption, parse_mode="Markdown")
+    except Exception as e:
+        print(f"[!] Prediction send failed: {e}")
+
 def start_hosted_prediction_bot(token, initial_owner, hosted_id):
     try:
         hosted = sync_telebot.TeleBot(token, parse_mode="Markdown")
@@ -2213,8 +2315,8 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
 
     active_dict = {}
     user_channels = {}
-    user_file = data_path(f"users_{me.id}.json")
-    owner_file = data_path(f"owner_{hosted_id}.txt")
+    user_file = os.path.join(DATA_DIR, f"users_{me.id}.json")
+    owner_file = os.path.join(DATA_DIR, f"owner_{hosted_id}.txt")
     runtime = {"paused": False}
     current_owner = {"id": initial_owner}
 
@@ -2239,7 +2341,6 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
             current_owner["id"] = uid
             hosted_bots.setdefault(uid, {})[hosted_id] = _entry_ref[0]
             update_registry_owner(hosted_id, uid)
-            print(f"[OWNER] Bot {me.username} owner set to {uid}")
         except Exception as e:
             print(f"[OWNER] Save failed: {e}")
 
@@ -2485,63 +2586,9 @@ def start_hosted_prediction_bot(token, initial_owner, hosted_id):
 
     return entry
 
-def generate_prediction_host():
-    num = random.randint(0, 9)
-    if num >= 5:
-        big_small = "🔴 BIG"
-        image = "https://i.postimg.cc/VL8z327L/IMG-20250908-115951-469.jpg"
-        trend = "📈 UPWARD TREND"
-    else:
-        big_small = "🔵 SMALL"
-        image = "https://i.postimg.cc/FzthF6Np/IMG-20250908-115954-296.jpg"
-        trend = "📉 DOWNWARD TREND"
-    return big_small, num, image, trend
-
-def generate_prediction_period():
-    ist = pytz.timezone("Asia/Kolkata")
-    now = datetime.now(ist)
-    yyyyMMdd = now.strftime("%Y%m%d")
-    total_minutes = now.hour * 60 + now.minute
-    return f"{yyyyMMdd}1000{10001 + total_minutes}"
-
-def get_remaining_seconds_host():
-    ist = pytz.timezone("Asia/Kolkata")
-    now = datetime.now(ist)
-    return 60 - now.second if now.second < 60 else 0
-
-def send_prediction_host(bot_obj, chat_id, period, big_small, num, image, trend):
-    ist = pytz.timezone("Asia/Kolkata")
-    now = datetime.now(ist)
-    timestamp = now.strftime("%d %b %Y • %I:%M:%S %p")
-
-    confidence = random.randint(88, 99)
-    filled = int(confidence / 10)
-    bar = "🟩" * filled + "⬜" * (10 - filled)
-
-    caption = (
-        f"{DIVIDER}\n"
-        f"{CROWN} *KOHLI AI PREDICTION* {CROWN}\n"
-        f"{DIVIDER}\n\n"
-        f"{TARGET} *Period:* `{period}`\n"
-        f"{BRAIN} *Signal:* {big_small} — `{num}`\n"
-        f"{CHART} *Trend:* {trend}\n"
-        f"{GEM} *Confidence:* `{confidence}%`\n"
-        f"`{bar}`\n\n"
-        f"{SUB_DIVIDER}\n"
-        f"⏱ *Next Cycle:* `1 Minute`\n"
-        f"🕒 *Issued:* `{timestamp}`\n"
-        f"{SUB_DIVIDER}\n\n"
-        f"{LIGHTNING} _Powered by KOHLI AI Engine_ {LIGHTNING}\n"
-        f"{DIVIDER}"
-    )
-    try:
-        bot_obj.send_photo(chat_id, image, caption=caption, parse_mode="Markdown")
-    except Exception as e:
-        print(f"[!] Prediction send failed: {e}")
-
-# ──────────────────────────────────────────────────────────────────────────────
-# API (FLASK)
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
+# FLASK API
+# ──────────────────────────────────────────────────────────────
 
 api_app = Flask(__name__)
 
@@ -2550,11 +2597,15 @@ def home():
     return jsonify({
         "status": "online",
         "service": "KOHLI Premium Hosting",
-        "version": "7.0",
+        "version": "8.0",
         "hosted_bots": sum(len(b) for b in hosted_bots.values()),
         "registry_count": len(hosted_registry),
         "timestamp": datetime.now().isoformat(),
     })
+
+@api_app.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
 
 @api_app.route("/api/create_bot", methods=["POST"])
 def api_create_bot():
@@ -2609,8 +2660,6 @@ def api_create_bot():
                 f"🤖 Bot: @{entry['info']['username']}\n"
                 f"🆔 ID: `{entry['info']['id']}`\n"
                 f"📦 Hosted: `{hosted_id}`\n\n"
-                f"{SUB_DIVIDER}\n"
-                f"⚠️ Owner assigned on first /start\n\n"
                 f"{styled_footer()}",
                 parse_mode="Markdown",
             )
@@ -2669,22 +2718,6 @@ def api_list_bots():
                             })
                 except Exception:
                     pass
-
-        for hid, entry in hosted_by_id.items():
-            if hid in seen:
-                continue
-            try:
-                get_owner = entry.get("get_owner")
-                if get_owner and str(get_owner()) == owner_id:
-                    seen.add(hid)
-                    result.append({
-                        "username": entry["info"]["username"],
-                        "bot_id": str(entry["info"]["id"]),
-                        "hosted_id": str(hid),
-                        "running": entry.get("running", True),
-                    })
-            except Exception:
-                pass
 
         for hid, reg in hosted_registry.items():
             if hid in seen:
@@ -2753,7 +2786,7 @@ def api_delete_bot():
             if hosted_id in bots:
                 del bots[hosted_id]
 
-        owner_file = entry.get("owner_file") or data_path(f"owner_{hosted_id}.txt")
+        owner_file = entry.get("owner_file") or os.path.join(DATA_DIR, f"owner_{hosted_id}.txt")
         if owner_file and os.path.exists(owner_file):
             try:
                 os.remove(owner_file)
@@ -2783,7 +2816,7 @@ def api_broadcast():
         entry = hosted_by_id[hosted_id]
         bot_id = entry["info"]["id"]
         token = entry.get("token")
-        user_file = data_path(f"users_{bot_id}.json")
+        user_file = os.path.join(DATA_DIR, f"users_{bot_id}.json")
         users = load_users(user_file)
 
         if not users:
@@ -2824,7 +2857,7 @@ def api_bot_stats():
 
         entry = hosted_by_id[hosted_id]
         bot_id = entry["info"]["id"]
-        user_file = data_path(f"users_{bot_id}.json")
+        user_file = os.path.join(DATA_DIR, f"users_{bot_id}.json")
         total, d1, d2, _ = get_stats(user_file)
 
         return jsonify({
@@ -2857,30 +2890,9 @@ def restore_bots_from_registry():
             print(f"[RESTORE] Failed to restore {hid}: {e}")
     print(f"[RESTORE] Total restored: {restored}")
 
-# ──────────────────────────────────────────────────────────────────────────────
-# PREMIUM UI CONSTANTS
-# ──────────────────────────────────────────────────────────────────────────────
-
-DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━"
-SUB_DIVIDER = "┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈"
-SPARKLE = "✨"
-CROWN = "👑"
-ROCKET = "🚀"
-FIRE = "🔥"
-GEM = "💎"
-LIGHTNING = "⚡"
-TARGET = "🎯"
-CHART = "📊"
-BELL = "🔔"
-SHIELD = "🛡️"
-BRAIN = "🧠"
-
-def styled_footer(text="KOHLI PREMIUM ENGINE"):
-    return f"{SUB_DIVIDER}\n{LIGHTNING} {text} {LIGHTNING}"
-
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 # SHUTDOWN & MAIN
-# ──────────────────────────────────────────────────────────────────────────────
+# ──────────────────────────────────────────────────────────────
 
 async def shutdown():
     global _http_client
@@ -2895,28 +2907,24 @@ async def shutdown():
 
 async def main():
     print("\n" + "=" * 60)
-    print("👑 KOHLI VIP BOT v7.0 — RAILWAY DEPLOYMENT")
+    print("👑 KOHLI VIP BOT v8.0 — ALL-IN-ONE RAILWAY BUILD")
     print("   ⚔️  SERVER 1 : Dragon Track (HTML Engine) — MAX L2")
-    print("   🤖  SERVER 2 : Adaptive Quant Engine (Dynamic Protection) — MAX L2")
-    print("   🔑  SERVER 3 : Seed Hash Decrypter (SHA256 Win Predictor)")
+    print("   🤖  SERVER 2 : Adaptive Quant Engine — MAX L2")
+    print("   🔑  SERVER 3 : Seed Hash Decrypter (SHA256)")
     print("=" * 60 + "\n")
-    
+
     for attempt in range(MAX_RETRIES):
         try:
             me = await bot.get_me()
-            print(f"✅ Bot successfully logged in as: @{me.username} (ID: {me.id})")
+            print(f"✅ Bot logged in as: @{me.username} (ID: {me.id})")
             break
         except ApiTelegramException as e:
             if e.error_code == 401:
-                print("\n" + "!" * 60)
-                print("❌ FATAL: Invalid BOT_TOKEN!")
-                print("👉 Get new token from @BotFather and update BOT_TOKEN")
-                print("!" * 60 + "\n")
+                print("\n❌ FATAL: Invalid BOT_TOKEN!")
                 await shutdown()
                 return
             elif attempt < MAX_RETRIES - 1:
-                print(f"⚠️ Attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
-                print(f"🔄 Retrying in {RETRY_DELAY} seconds...")
+                print(f"⚠️ Attempt {attempt + 1}/{MAX_RETRIES}: {e}")
                 await asyncio.sleep(RETRY_DELAY)
             else:
                 print(f"❌ Telegram API Error: {e}")
@@ -2924,23 +2932,18 @@ async def main():
                 return
         except Exception as e:
             if attempt < MAX_RETRIES - 1:
-                print(f"⚠️ Connection attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
-                print(f"🔄 Retrying in {RETRY_DELAY} seconds...")
+                print(f"⚠️ Connection {attempt + 1}/{MAX_RETRIES}: {e}")
                 await asyncio.sleep(RETRY_DELAY)
             else:
-                print(f"❌ Failed to connect after {MAX_RETRIES} attempts")
-                print("\n🔧 TROUBLESHOOTING:")
-                print("1. Check internet connection")
-                print("2. If using proxy, uncomment PROXY_CONFIG")
-                print("3. Try: ping api.telegram.org")
+                print(f"❌ Failed after {MAX_RETRIES} attempts")
                 await shutdown()
                 return
 
     try:
         await recover_sessions()
         print("✅ BOT ONLINE & RUNNING!")
-        print(f"📡 Polling with timeout: {REQUEST_TIMEOUT}s")
-        await bot.polling(non_stop=True, allowed_updates=util.update_types, request_timeout=REQUEST_TIMEOUT)
+        await bot.polling(non_stop=True, allowed_updates=util.update_types,
+                          request_timeout=REQUEST_TIMEOUT)
     except Exception as e:
         print(f"❌ Live polling error: {e}")
     finally:
@@ -2949,10 +2952,6 @@ async def main():
 def run_api():
     port = int(os.environ.get("PORT", 5000))
     api_app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
-
-def run_flask():
-    thread = threading.Thread(target=run_api, daemon=True)
-    thread.start()
 
 def run_host_bot():
     while True:
@@ -2965,16 +2964,16 @@ def run_host_bot():
 if __name__ == "__main__":
     print("""
 ╔══════════════════════════════════════════════╗
-║   👑 KOHLI VIP PREDICTION BOT v7.0 👑       ║
-║   🚀 Railway Ready • Auto-Restore Enabled   ║
+║   👑 KOHLI VIP PREDICTION BOT v8.0 👑       ║
+║   🚀 All-in-One • Railway Ready • No Docker ║
 ╚══════════════════════════════════════════════╝
 """)
 
     # Restore hosted bots
     threading.Thread(target=restore_bots_from_registry, daemon=True).start()
 
-    # Start Flask API
-    run_flask()
+    # Start Flask API in background
+    threading.Thread(target=run_api, daemon=True).start()
 
     # Start host bot in background
     threading.Thread(target=run_host_bot, daemon=True).start()
